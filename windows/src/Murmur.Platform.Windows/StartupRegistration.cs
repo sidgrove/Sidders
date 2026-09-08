@@ -20,7 +20,7 @@ namespace Murmur.Platform.Windows;
 public sealed class StartupRegistration : IStartupRegistration
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "Murmur";
+    private const string ValueName = "Sidders";
 
     /// <summary>The argument that tells the app to start in the tray.</summary>
     public const string MinimizedArgument = "--minimized";

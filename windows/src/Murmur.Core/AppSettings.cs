@@ -1,3 +1,4 @@
+using Murmur.Abstractions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -49,9 +50,7 @@ public sealed class AppSettings
     }
 
     /// <summary>The default location.</summary>
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Murmur", "settings.json");
+    public static string DefaultPath => Path.Combine(AppPaths.Root, "settings.json");
 
     /// <summary>Current values.</summary>
     public SettingsData Data { get; private set; }

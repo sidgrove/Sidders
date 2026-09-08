@@ -1,6 +1,6 @@
-# Murmur for Windows
+# Sidders for Windows
 
-The Windows port of Murmur — push-to-talk dictation, on-device.
+Sidders is the Windows port of Murmur — push-to-talk dictation, on-device.
 
 > **Status: running on real hardware since 2026-09-08.** Built, installed and driven on a
 > Windows 11 machine: the hook arms, the model loads in ~1.3 s, the front panel, tray,
@@ -15,7 +15,7 @@ The Windows port of Murmur — push-to-talk dictation, on-device.
 ```powershell
 cd windows
 .\publish.ps1      # self-contained win-x64 build into windows\dist, runs the self-test
-.\install.ps1      # copies to %LOCALAPPDATA%\Programs\Murmur, Start menu, Apps entry, launches
+.\install.ps1      # copies to %LOCALAPPDATA%\Programs\Sidders, Start menu, Apps entry, launches
 ```
 
 No administrator rights at any point. `install.ps1 -Uninstall` removes it again and keeps the
@@ -26,8 +26,8 @@ First run: open **Settings** (Ctrl+,), press **DOWNLOAD** under Model. It fetche
 **Right Ctrl**, talk, release. Pick a microphone in the same window if the Windows default
 is not the one you dictate into.
 
-Everything the app writes lives in `%LOCALAPPDATA%\Murmur`: `settings.json`,
-`dictionary.txt` (edit it by hand if you like), `transcripts.jsonl`, `murmur.log`, and
+Everything the app writes lives in `%LOCALAPPDATA%\Sidders`: `settings.json`,
+`dictionary.txt` (edit it by hand if you like), `transcripts.jsonl`, `sidders.log`, and
 `models\`.
 
 ---
@@ -47,7 +47,7 @@ Three bugs, none of which 63 green tests and a passing self-test could have caug
    preloads at startup.
 
 And one design gap: every one of those failed *silently*, inside `_ = BeginAsync()`. The
-engine now logs to `murmur.log`, raises `Faulted`, and the front panel shows the message.
+engine now logs to `sidders.log`, raises `Faulted`, and the front panel shows the message.
 
 ---
 

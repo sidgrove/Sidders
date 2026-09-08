@@ -1,3 +1,4 @@
+using Murmur.Abstractions;
 using System.Diagnostics;
 using System.Globalization;
 using Avalonia;
@@ -60,7 +61,7 @@ public sealed class SettingsWindow : UnitWindow
         _composition = composition;
         _settings = composition.Settings;
 
-        Title = "Murmur Settings";
+        Title = "Sidders Settings";
         ModelNumber = "SETTINGS";
         IsResizableUnit = false;
         Width = Tokens.Layout.SettingsWidth;
@@ -100,7 +101,7 @@ public sealed class SettingsWindow : UnitWindow
             IsVisible = false,
         };
 
-        Content = Frame("Murmur", BuildContent());
+        Content = Frame(AppPaths.ProductName, BuildContent());
         SelectKey(_settings.Data.PushToTalkKey, WarningFor(_settings.Data.PushToTalkKey));
         RefreshModel();
     }
@@ -123,7 +124,7 @@ public sealed class SettingsWindow : UnitWindow
 
         if (_composition.Startup is { } startup)
         {
-            behaviour.Children.Add(Toggle("Start Murmur when I sign in to Windows", startup.IsEnabled,
+            behaviour.Children.Add(Toggle("Start Sidders when I sign in to Windows", startup.IsEnabled,
                 v => { if (!startup.SetEnabled(v)) Log.Warn("could not change start-up registration"); }));
         }
 

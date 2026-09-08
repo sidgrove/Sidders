@@ -1,3 +1,4 @@
+using Murmur.Abstractions;
 using Murmur.Dictionary;
 
 namespace Murmur.Core;
@@ -44,9 +45,7 @@ public sealed class DictionaryFile
     }
 
     /// <summary>The default location, alongside the transcript history.</summary>
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Murmur", "dictionary.txt");
+    public static string DefaultPath => Path.Combine(AppPaths.Root, "dictionary.txt");
 
     /// <summary>
     /// Where this dictionary lives on disk.
@@ -165,7 +164,7 @@ public sealed class DictionaryFile
 
     private static readonly string Header = string.Join(Environment.NewLine,
     [
-        "# Murmur dictionary",
+        "# Sidders dictionary",
         "#",
         "#   Anthropic                 a term — the engine is told this word exists",
         "#   cloud code -> Claude Code a correction — when you hear X, write Y",

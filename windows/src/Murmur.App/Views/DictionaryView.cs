@@ -1,3 +1,4 @@
+using Murmur.Abstractions;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -244,7 +245,7 @@ public sealed class DictionaryEditorWindow : UnitWindow
             Close();
         };
 
-        Content = Frame("Murmur", BuildContent(cancel));
+        Content = Frame(AppPaths.ProductName, BuildContent(cancel));
         SetKind(_kind);
     }
 

@@ -13,13 +13,13 @@
        recording, from App.SetTrayRecording. -->
   <TrayIcon.Icons>
     <TrayIcons>
-      <TrayIcon Icon="/Assets/tray.ico" ToolTipText="Murmur — hold the push-to-talk key to dictate" Clicked="OnTrayShow">
+      <TrayIcon Icon="/Assets/tray.ico" ToolTipText="Sidders — hold the push-to-talk key to dictate" Clicked="OnTrayShow">
         <TrayIcon.Menu>
           <NativeMenu>
-            <NativeMenuItem Header="Show Murmur" Click="OnTrayShow" />
+            <NativeMenuItem Header="Show Sidders" Click="OnTrayShow" />
             <NativeMenuItem Header="Settings…" Click="OnTraySettings" />
             <NativeMenuItemSeparator />
-            <NativeMenuItem Header="Quit Murmur" Click="OnTrayQuit" />
+            <NativeMenuItem Header="Quit Sidders" Click="OnTrayQuit" />
           </NativeMenu>
         </TrayIcon.Menu>
       </TrayIcon>

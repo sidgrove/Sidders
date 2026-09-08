@@ -1,3 +1,4 @@
+using Murmur.Abstractions;
 using System.Diagnostics;
 using System.Globalization;
 using Avalonia;
@@ -62,7 +63,7 @@ public sealed class MainWindow : UnitWindow
     {
         _composition = composition;
 
-        Title = "Murmur";
+        Title = AppPaths.ProductName;
         ModelNumber = "PD-26  ·  PORTABLE DICTATION UNIT";
         MinWidth = Tokens.Layout.MainMinWidth;
         MinHeight = Tokens.Layout.MainMinHeight;
@@ -111,7 +112,7 @@ public sealed class MainWindow : UnitWindow
             _overlay = new OverlayWindow(PlatformFactory.CreateWindowTweaks());
         }
 
-        Content = Frame("Murmur", BuildBody());
+        Content = Frame(AppPaths.ProductName, BuildBody());
         ShowSection(transcriptions: true);
 
         if (_composition?.Engine is { } engine)
@@ -169,7 +170,7 @@ public sealed class MainWindow : UnitWindow
                 new MenuEntry("Settings", new KeyGesture(Key.OemComma, KeyModifiers.Control), ShowSettings),
                 MenuEntry.Separator,
                 new MenuEntry("Hide to tray", new KeyGesture(Key.W, KeyModifiers.Control), Hide),
-                new MenuEntry("Quit Murmur", new KeyGesture(Key.Q, KeyModifiers.Control), App.Quit),
+                new MenuEntry("Quit Sidders", new KeyGesture(Key.Q, KeyModifiers.Control), App.Quit),
             ]),
             new MenuGroup("Edit",
             [
@@ -194,7 +195,7 @@ public sealed class MainWindow : UnitWindow
                 new MenuEntry("Speech model guide", null, () => OpenPath(ModelGuideUrl)),
                 new MenuEntry("Open log", null, () => OpenPath(Log.Path)),
                 MenuEntry.Separator,
-                new MenuEntry("About Murmur", new KeyGesture(Key.F1), ShowAbout),
+                new MenuEntry("About Sidders", new KeyGesture(Key.F1), ShowAbout),
             ]),
         ]);
 

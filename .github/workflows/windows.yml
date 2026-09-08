@@ -79,7 +79,7 @@ jobs:
             --configuration Release --runtime win-x64 --self-contained true `
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
             --output artifacts/publish
-          $exe = 'artifacts/publish/Murmur.exe'
+          $exe = 'artifacts/publish/Sidders.exe'
           if (-not (Test-Path $exe)) { throw "Published exe not found at $exe" }
           $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
           Write-Host "published: $size MB"
@@ -92,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Murmur-win-x64
-          path: windows/artifacts/publish/Murmur.exe
+          path: windows/artifacts/publish/Sidders.exe
           if-no-files-found: error
           compression-level: 0
 

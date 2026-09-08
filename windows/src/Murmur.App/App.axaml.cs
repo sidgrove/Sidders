@@ -71,7 +71,7 @@ public partial class App : Application
 
         var icon = recording ? s_trayRecording : s_trayIdle;
         if (icon is not null) icons[0].Icon = icon;
-        icons[0].ToolTipText = recording ? "Murmur — recording" : "Murmur — hold the push-to-talk key to dictate";
+        icons[0].ToolTipText = recording ? "Sidders — recording" : "Sidders — hold the push-to-talk key to dictate";
     }
 
     /// <summary>Ends the app from anywhere.</summary>
@@ -85,7 +85,7 @@ public partial class App : Application
     {
         try
         {
-            return new WindowIcon(AssetLoader.Open(new Uri($"avares://Murmur/Assets/{name}")));
+            return new WindowIcon(AssetLoader.Open(new Uri($"avares://Sidders/Assets/{name}")));
         }
         catch (Exception e) when (e is FileNotFoundException or IOException or ArgumentException)
         {

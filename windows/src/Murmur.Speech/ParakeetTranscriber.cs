@@ -60,9 +60,7 @@ public sealed class ParakeetTranscriber : ITranscriber
     /// </remarks>
     public static IEnumerable<string> DefaultSearchPaths()
     {
-        yield return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Murmur", "models", "parakeet-v2");
+        yield return Path.Combine(AppPaths.Root, "models", "parakeet-v2");
 
         // AppContext.BaseDirectory, not Assembly.Location — the latter returns an empty
         // string in a single-file app, which silently resolves paths against the current

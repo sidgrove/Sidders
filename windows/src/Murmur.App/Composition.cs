@@ -73,7 +73,8 @@ public sealed class Composition : IAsyncDisposable
     /// <summary>Builds the object graph.</summary>
     public static Composition Create()
     {
-        Log.Info($"Murmur starting: {Environment.ProcessPath} on {Environment.OSVersion}");
+        AppPaths.MigrateLegacyFolder();
+        Log.Info($"{AppPaths.ProductName} starting: {Environment.ProcessPath} on {Environment.OSVersion}");
 
         var settings = new AppSettings(AppSettings.DefaultPath);
         var dictionary = new DictionaryFile(DictionaryFile.DefaultPath);
@@ -132,6 +133,6 @@ public sealed class Composition : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (Engine is not null) await Engine.DisposeAsync().ConfigureAwait(false);
-        Log.Info("Murmur stopped");
+        Log.Info($"{AppPaths.ProductName} stopped");
     }
 }

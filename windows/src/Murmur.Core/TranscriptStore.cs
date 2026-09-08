@@ -1,3 +1,4 @@
+using Murmur.Abstractions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Murmur.Dictionary;
@@ -53,9 +54,7 @@ public sealed class TranscriptStore
     }
 
     /// <summary>The default location.</summary>
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Murmur", "transcripts.jsonl");
+    public static string DefaultPath => Path.Combine(AppPaths.Root, "transcripts.jsonl");
 
     /// <summary>Every record, newest first.</summary>
     public IReadOnlyList<TranscriptRecord> Records => _records;

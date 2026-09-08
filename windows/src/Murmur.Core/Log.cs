@@ -1,3 +1,4 @@
+using Murmur.Abstractions;
 using System.Globalization;
 using System.Text;
 
@@ -30,9 +31,7 @@ public static class Log
     /// <summary>Where the log is written. Defaults to the app data folder.</summary>
     public static string Path
     {
-        get => _path ??= System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Murmur", "murmur.log");
+        get => _path ??= System.IO.Path.Combine(AppPaths.Root, "sidders.log");
         set => _path = value;
     }
 
