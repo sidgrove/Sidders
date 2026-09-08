@@ -21,8 +21,28 @@ public sealed class WashPanel : Decorator
         if (bounds.Width <= 0 || bounds.Height <= 0) return;
 
         context.FillRectangle(Tokens.Brushes.Wash, bounds);
-        context.FillRectangle(Bloom(Tokens.Colors.Brand, Tokens.Opacity.WashTop, new RelativePoint(0.65, -0.10, RelativeUnit.Relative), 0.80, 0.50), bounds);
-        context.FillRectangle(Bloom(Tokens.Colors.BrandStrong, Tokens.Opacity.WashBottom, new RelativePoint(-0.05, 0.95, RelativeUnit.Relative), 0.50, 0.55), bounds);
+
+        // The site's hero: a faint grid that fades out from the top, then the periwinkle
+        // bloom top-right, the peach bloom left, and the small rose orb.
+        var pen = new Pen(Tokens.Brushes.GridLine, Tokens.Border.Hairline);
+        for (var x = 0.0; x < bounds.Width; x += Tokens.Layout.GridPitch) context.DrawLine(pen, new Point(x, 0), new Point(x, bounds.Height));
+        for (var y = 0.0; y < bounds.Height; y += Tokens.Layout.GridPitch) context.DrawLine(pen, new Point(0, y), new Point(bounds.Width, y));
+        context.FillRectangle(new RadialGradientBrush
+        {
+            Center = new RelativePoint(0.5, 0.2, RelativeUnit.Relative),
+            GradientOrigin = new RelativePoint(0.5, 0.2, RelativeUnit.Relative),
+            RadiusX = new RelativeScalar(0.9, RelativeUnit.Relative),
+            RadiusY = new RelativeScalar(0.8, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(Color.FromArgb(0, Tokens.Colors.Wash.R, Tokens.Colors.Wash.G, Tokens.Colors.Wash.B), 0.3),
+                new GradientStop(Tokens.Colors.Wash, 0.75),
+            },
+        }, bounds);
+
+        context.FillRectangle(Bloom(Tokens.Colors.PeriBright, Tokens.Opacity.HeroPeri, new RelativePoint(0.80, -0.05, RelativeUnit.Relative), 0.85, 0.55), bounds);
+        context.FillRectangle(Bloom(Tokens.Colors.Peach, Tokens.Opacity.HeroPeach, new RelativePoint(0.02, 0.42, RelativeUnit.Relative), 0.55, 0.50), bounds);
+        context.FillRectangle(Bloom(Tokens.Colors.RoseSoft, Tokens.Opacity.HeroRose, new RelativePoint(0.86, 0.38, RelativeUnit.Relative), 0.22, 0.30), bounds);
     }
 
     private static RadialGradientBrush Bloom(Color colour, double opacity, RelativePoint centre, double rx, double ry) => new()
@@ -254,8 +274,8 @@ public sealed class SgButton : Button
     private readonly Kind _kind;
     private readonly Border _skin = new();
 
-    /// <summary>Creates a button with a text label.</summary>
-    public SgButton(string label, Kind kind = Kind.Ghost, bool compact = false)
+    /// <summary>Creates a button with a text label, or any content.</summary>
+    public SgButton(object label, Kind kind = Kind.Ghost, bool compact = false)
     {
         _kind = kind;
         Content = label;
@@ -265,7 +285,9 @@ public sealed class SgButton : Button
         FontSize = hero ? Tokens.Fonts.HeroButton : compact ? Tokens.Fonts.Small : Tokens.Fonts.Body;
         FontWeight = kind is Kind.Primary or Kind.Hero ? FontWeight.Bold : FontWeight.SemiBold;
         Height = hero ? Tokens.Layout.HeroButtonHeight : compact ? Tokens.Layout.ButtonHeightSmall : Tokens.Layout.ButtonHeight;
-        Padding = new Thickness(hero ? Tokens.Layout.HeroPadX : compact ? Tokens.Layout.ButtonPadXSmall : Tokens.Layout.ButtonPadX, 0);
+        Padding = hero
+            ? new Thickness(Tokens.Layout.HeroPadLeft, 0, Tokens.Layout.HeroPadRight, 0)
+            : new Thickness(compact ? Tokens.Layout.ButtonPadXSmall : Tokens.Layout.ButtonPadX, 0);
         Background = Tokens.Brushes.None;
         BorderThickness = new Thickness(0);
         HorizontalContentAlignment = HorizontalAlignment.Center;
@@ -834,5 +856,220 @@ public sealed class Gauge : Control
         context.DrawRectangle(Tokens.Brushes.Line, null, new RoundedRect(bounds, Tokens.Radius.Pill));
         var fill = bounds.WithWidth(bounds.Width * Math.Clamp(Fraction, 0, 1));
         context.DrawRectangle(Tokens.Brushes.BrandStrong, null, new RoundedRect(fill, Tokens.Radius.Pill));
+    }
+}
+
+/// <summary>Headline text in the site's voice: Very Vogue, with an italic accent in brand-strong.</summary>
+public static class Headline
+{
+    /// <summary>The upright line. <c>h1</c>.</summary>
+    public static TextBlock Line(string text) => new()
+    {
+        Text = text,
+        FontFamily = Tokens.Fonts.Serif,
+        FontSize = Tokens.Fonts.Headline,
+        FontWeight = FontWeight.Normal,
+        LineHeight = Tokens.Fonts.HeadlineLineHeight,
+        LetterSpacing = Tokens.Fonts.TitleTracking,
+        Foreground = Tokens.Brushes.Ink,
+        TextWrapping = TextWrapping.Wrap,
+    };
+
+    /// <summary>The italic accent line. <c>h1 .emphasis</c>.</summary>
+    public static TextBlock Accent(string text) => new()
+    {
+        Text = text,
+        FontFamily = Tokens.Fonts.SerifItalic,
+        FontStyle = FontStyle.Italic,
+        FontSize = Tokens.Fonts.Headline,
+        FontWeight = FontWeight.Normal,
+        LineHeight = Tokens.Fonts.HeadlineLineHeight,
+        Foreground = Tokens.Brushes.BrandStrong,
+        TextWrapping = TextWrapping.Wrap,
+    };
+
+    /// <summary>The subtitle beneath. <c>.subtitle</c>.</summary>
+    public static TextBlock Subtitle(string text) => new()
+    {
+        Text = text,
+        FontFamily = Tokens.Fonts.Sans,
+        FontSize = Tokens.Fonts.Subtitle,
+        Foreground = Tokens.Brushes.Muted,
+        TextWrapping = TextWrapping.Wrap,
+        LineHeight = Tokens.Fonts.Subtitle * 1.5,
+    };
+}
+
+/// <summary>A micro label in the mono face: 11px, uppercase, 0.16em. <c>--label</c>.</summary>
+public static class MonoLabel
+{
+    /// <summary>Creates the label.</summary>
+    public static TextBlock Make(string text, IBrush? brush = null) => new()
+    {
+        Text = text.ToUpperInvariant(),
+        FontFamily = Tokens.Fonts.Mono,
+        FontSize = Tokens.Fonts.MonoLabel,
+        FontWeight = FontWeight.Normal,
+        LetterSpacing = Tokens.Fonts.MonoLabelTracking,
+        Foreground = brush ?? Tokens.Brushes.Faint,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+}
+
+/// <summary>
+/// The site's badge: a white pill with a coloured dot and a mono uppercase label.
+/// </summary>
+public sealed class Badge : Border
+{
+    private readonly StatusDot _dot;
+    private readonly TextBlock _label;
+
+    /// <summary>Creates a badge.</summary>
+    public Badge(string text, IBrush? dot = null)
+    {
+        _dot = new StatusDot { Fill = dot ?? Tokens.Brushes.Brand, VerticalAlignment = VerticalAlignment.Center };
+        _label = MonoLabel.Make(text, Tokens.Brushes.Muted);
+
+        Background = Tokens.Brushes.Card;
+        BorderBrush = Tokens.Brushes.Line;
+        BorderThickness = new Thickness(Tokens.Border.Hairline);
+        CornerRadius = new CornerRadius(Tokens.Radius.Pill);
+        BoxShadow = Tokens.Shadow.Soft;
+        Height = Tokens.Layout.BadgeHeight;
+        Padding = new Thickness(Tokens.Space.Base, 0, Tokens.Layout.BadgePadX, 0);
+        HorizontalAlignment = HorizontalAlignment.Left;
+        Child = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = Tokens.Space.Snug,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _dot, _label },
+        };
+    }
+
+    /// <summary>Updates the label and dot.</summary>
+    public void Set(string text, IBrush dot, bool live)
+    {
+        _label.Text = text.ToUpperInvariant();
+        _dot.Fill = dot;
+        _dot.IsLive = live;
+    }
+}
+
+/// <summary>A nav link in the site's voice: muted text, brand-strong when active, an underline that grows in.</summary>
+public sealed class NavLink : Button
+{
+    private readonly TextBlock _label;
+    private readonly Border _underline;
+    private bool _active;
+
+    /// <summary>Creates the link.</summary>
+    public NavLink(string text)
+    {
+        _label = new TextBlock
+        {
+            Text = text,
+            FontFamily = Tokens.Fonts.Sans,
+            FontSize = Tokens.Fonts.Nav,
+            FontWeight = FontWeight.Medium,
+            Foreground = Tokens.Brushes.Muted,
+        };
+        _underline = new Border
+        {
+            Height = Tokens.Layout.NavUnderline,
+            CornerRadius = new CornerRadius(Tokens.Radius.Pill),
+            Background = Tokens.Brushes.NavUnderline,
+            Opacity = 0,
+            Transitions = [new DoubleTransition { Property = OpacityProperty, Duration = Tokens.Motion.Lift }],
+        };
+
+        Background = Tokens.Brushes.None;
+        BorderThickness = new Thickness(0);
+        Padding = new Thickness(0, Tokens.Space.Snug);
+        Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+        Template = new FuncControlTemplate<NavLink>((_, _) => new StackPanel
+        {
+            Spacing = Tokens.Space.Tight,
+            Children = { _label, _underline },
+        });
+    }
+
+    /// <summary>Whether this link is the current section.</summary>
+    public bool IsActive
+    {
+        get => _active;
+        set { _active = value; Paint(); }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsPointerOverProperty) Paint();
+    }
+
+    private void Paint()
+    {
+        var lit = _active || IsPointerOver;
+        _label.Foreground = lit ? Tokens.Brushes.BrandStrong : Tokens.Brushes.Muted;
+        _underline.Opacity = lit ? 1 : 0;
+    }
+}
+
+/// <summary>The wordmark: DM Sans bold, tight, as the site's logo reads.</summary>
+public static class Wordmark
+{
+    /// <summary>Creates the wordmark.</summary>
+    public static TextBlock Make(string text) => new()
+    {
+        Text = text,
+        FontFamily = Tokens.Fonts.Sans,
+        FontSize = Tokens.Fonts.Wordmark,
+        FontWeight = FontWeight.Bold,
+        LetterSpacing = Tokens.Fonts.HeadingTracking * 1.5,
+        Foreground = Tokens.Brushes.Ink,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+}
+
+/// <summary>The white coin that rides inside the hero button. <c>.button-coin</c>.</summary>
+public sealed class Coin : Control
+{
+    /// <summary>Whether the coin shows the record dot or the arrow.</summary>
+    public static readonly StyledProperty<bool> IsStopProperty =
+        AvaloniaProperty.Register<Coin, bool>(nameof(IsStop));
+
+    /// <inheritdoc cref="IsStopProperty"/>
+    public bool IsStop
+    {
+        get => GetValue(IsStopProperty);
+        set => SetValue(IsStopProperty, value);
+    }
+
+    static Coin() => AffectsRender<Coin>(IsStopProperty);
+
+    /// <summary>Creates the coin at the token size.</summary>
+    public Coin()
+    {
+        Width = Tokens.Layout.Coin;
+        Height = Tokens.Layout.Coin;
+    }
+
+    /// <inheritdoc />
+    public override void Render(DrawingContext context)
+    {
+        var c = new Point(Bounds.Width / 2, Bounds.Height / 2);
+        var r = Bounds.Width / 2;
+        context.DrawEllipse(Tokens.Brushes.Card, null, c, r, r);
+
+        if (IsStop)
+        {
+            var s = r * 0.42;
+            context.DrawRectangle(Tokens.Brushes.BrandStrong, null, new RoundedRect(new Rect(c.X - s, c.Y - s, 2 * s, 2 * s), Tokens.Radius.Bar));
+        }
+        else
+        {
+            context.DrawEllipse(Tokens.Brushes.Rose, null, c, r * 0.32, r * 0.32);
+        }
     }
 }

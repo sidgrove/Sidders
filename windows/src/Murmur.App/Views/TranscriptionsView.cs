@@ -30,6 +30,8 @@ public sealed class TranscriptionsView : UserControl
 
         _search = Field.Search("Search transcriptions");
         _search.TextChanged += (_, _) => Refresh();
+        _search.MaxWidth = Tokens.Layout.ContentMaxWidth / 2;
+        _search.HorizontalAlignment = HorizontalAlignment.Right;
 
         _list = new StackPanel { Spacing = Tokens.Space.Base, Margin = new Thickness(0, Tokens.Space.Roomy, 0, Tokens.Space.Roomy) };
         _count = Text.Caption(string.Empty);
@@ -41,7 +43,7 @@ public sealed class TranscriptionsView : UserControl
         {
             Children =
             {
-                Panels.Docked(Gutter(_search), Dock.Top),
+                Panels.Docked(Gutter(Panels.Split(new Badge("Recent"), _search)), Dock.Top),
                 Panels.Docked(Gutter(Panels.Split(_count, clear)), Dock.Bottom),
                 // Padding inside the scroll viewer, not margin outside it: the viewer clips to its
                 // bounds, and without room the cards' shadows are cut off at the sides.
@@ -103,9 +105,9 @@ public sealed class TranscriptionsView : UserControl
         var delete = new SgButton("Delete", SgButton.Kind.Danger, compact: true);
         delete.Click += (_, _) => _store.Remove(record.Id);
 
-        var meta = new WrapPanel { ItemSpacing = Tokens.Space.Snug, LineSpacing = Tokens.Space.Tight };
-        meta.Children.Add(Text.Caption(record.At.ToLocalTime().ToString("HH:mm  ·  d MMM", CultureInfo.CurrentCulture)));
-        meta.Children.Add(Text.Caption($"{record.AudioSeconds:0.0}s spoken  ·  {record.ProcessingSeconds * 1000:0} ms"));
+        var meta = new WrapPanel { ItemSpacing = Tokens.Space.Base, LineSpacing = Tokens.Space.Tight };
+        meta.Children.Add(MonoLabel.Make(record.At.ToLocalTime().ToString("HH:mm · d MMM", CultureInfo.CurrentCulture)));
+        meta.Children.Add(MonoLabel.Make($"{record.AudioSeconds:0.0}s · {record.ProcessingSeconds * 1000:0} ms"));
 
         if (record.CleanedBy is { Length: > 0 } model) meta.Children.Add(Pill.Brand($"AI · {model}"));
 
@@ -126,6 +128,10 @@ public sealed class TranscriptionsView : UserControl
         var body = Panels.Column(Tokens.Space.Base, Text.Reading(record.Text), meta);
         body.Margin = new Thickness(0, 0, Tokens.Space.Roomy, 0);
 
-        return Card.Lifting(Panels.Split(body, actions), Tokens.Space.Roomy);
+        var card = Card.Lifting(Panels.Split(body, actions), Tokens.Space.Wide);
+        card.CornerRadius = new CornerRadius(Tokens.Radius.CardLarge);
+        card.BorderBrush = Tokens.Brushes.Line;
+        card.BoxShadow = Tokens.Shadow.Soft;
+        return card;
     }
 }

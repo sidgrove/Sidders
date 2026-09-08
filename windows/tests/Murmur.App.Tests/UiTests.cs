@@ -184,5 +184,8 @@ public sealed class FontTests
         manager.TryGetGlyphTypeface(new Avalonia.Media.Typeface(Tokens.Fonts.Sans, weight: Avalonia.Media.FontWeight.Bold), out _).ShouldBeTrue("DM Sans bold");
         manager.TryGetGlyphTypeface(new Avalonia.Media.Typeface(Tokens.Fonts.Serif), out _).ShouldBeTrue("Very Vogue Text");
         manager.TryGetGlyphTypeface(new Avalonia.Media.Typeface(Tokens.Fonts.Display), out _).ShouldBeTrue("Perfectly Nineties");
+        manager.TryGetGlyphTypeface(new Avalonia.Media.Typeface(Tokens.Fonts.SerifItalic, style: Avalonia.Media.FontStyle.Italic), out var italic).ShouldBeTrue("Very Vogue italic");
+        italic!.Style.ShouldBe(Avalonia.Media.FontStyle.Italic);
+        manager.TryGetGlyphTypeface(new Avalonia.Media.Typeface(Tokens.Fonts.Mono), out _).ShouldBeTrue("JetBrains Mono");
     }
 }

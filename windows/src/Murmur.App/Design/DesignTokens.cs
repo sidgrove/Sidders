@@ -102,6 +102,18 @@ public static class Tokens
         /// <summary>Text on brand-strong.</summary>
         public static Color OnBrand => Rgb(0xFFFFFF);
 
+        /// <summary>Periwinkle, the site's hero bloom and nav underline. <c>--peri</c>.</summary>
+        public static Color Peri => Rgb(0x9297E8);
+
+        /// <summary>The bright hero bloom. <c>rgba(124,135,232)</c>.</summary>
+        public static Color PeriBright => Rgb(0x7C87E8);
+
+        /// <summary>Peach, the second hero bloom. <c>--peach</c>.</summary>
+        public static Color Peach => Rgb(0xFFC5B2);
+
+        /// <summary>Soft rose, the third orb. <c>--rose-soft</c>.</summary>
+        public static Color RoseSoft => Rgb(0xF0B8C8);
+
         private static Color Rgb(uint hex) => Color.FromRgb(
             (byte)((hex >> 16) & 0xFF), (byte)((hex >> 8) & 0xFF), (byte)(hex & 0xFF));
     }
@@ -205,6 +217,12 @@ public static class Tokens
         /// <summary>Idle listening bars.</summary>
         public static IBrush BarsIdle { get; } = new SolidColorBrush(Colors.BrandMid, Opacity.BarsIdle);
 
+        /// <summary>The hero grid lines, brand at 6%. <c>.grid-pattern</c>.</summary>
+        public static IBrush GridLine { get; } = new SolidColorBrush(Colors.Brand, Opacity.Grid);
+
+        /// <summary>The nav underline. Solid peri, not the site's peri-to-peach gradient.</summary>
+        public static IBrush NavUnderline { get; } = new SolidColorBrush(Colors.Peri);
+
         /// <summary>The lit top edge inside the hero button.</summary>
         public static IBrush HeroHighlight { get; } = new SolidColorBrush(Colors.Card, Opacity.HeroInsetHighlight);
     }
@@ -244,6 +262,18 @@ public static class Tokens
 
         /// <summary>The lit top edge inside the hero button. <c>.button</c> on the site.</summary>
         public const double HeroInsetHighlight = 0.16;
+
+        /// <summary>Hero grid lines. <c>.grid-pattern</c>.</summary>
+        public const double Grid = 0.06;
+
+        /// <summary>The periwinkle hero bloom. <c>.hero</c> background.</summary>
+        public const double HeroPeri = 0.13;
+
+        /// <summary>The peach hero bloom.</summary>
+        public const double HeroPeach = 0.10;
+
+        /// <summary>The rose orb. <c>.orb-rose</c>, softened for a smaller canvas.</summary>
+        public const double HeroRose = 0.14;
     }
 
     // ---- Type ----
@@ -263,6 +293,12 @@ public static class Tokens
 
         /// <summary>Perfectly Nineties. The hero number only, weight 400.</summary>
         public static FontFamily Display { get; } = new("fonts:Sidders#Perfectly Nineties");
+
+        /// <summary>Very Vogue Text Italic. The accent line of a headline. <c>h1 .emphasis</c>.</summary>
+        public static FontFamily SerifItalic { get; } = new("fonts:Sidders#Very Vogue");
+
+        /// <summary>JetBrains Mono. Chip labels and micro labels only. <c>--mono</c>.</summary>
+        public static FontFamily Mono { get; } = new("fonts:Sidders#JetBrains Mono");
 
         /// <summary>Tabular figures, the <c>.num</c> class.</summary>
         public static FontFeatureCollection Tabular { get; } = [new FontFeature { Tag = "tnum" }];
@@ -302,6 +338,27 @@ public static class Tokens
 
         /// <summary>The hero number in Perfectly Nineties.</summary>
         public const double Hero = 34;
+
+        /// <summary>The site's mono label. <c>--label</c>: 11px, 0.16em, uppercase.</summary>
+        public const double MonoLabel = 11;
+
+        /// <summary>Mono label tracking, 0.16em at 11px.</summary>
+        public const double MonoLabelTracking = 1.76;
+
+        /// <summary>The hero headline in Very Vogue, at app scale. Site h1 is 48–78px.</summary>
+        public const double Headline = 46;
+
+        /// <summary>Headline line height, <c>1.06</c>.</summary>
+        public const double HeadlineLineHeight = 49;
+
+        /// <summary>The hero subtitle. Site <c>.subtitle</c> 1.125rem.</summary>
+        public const double Subtitle = 16;
+
+        /// <summary>Nav links. <c>.nav-links a</c> 0.9375rem, weight 500.</summary>
+        public const double Nav = 15;
+
+        /// <summary>The wordmark, DM Sans bold, tight.</summary>
+        public const double Wordmark = 22;
 
         /// <summary>Eyebrow tracking, 0.14em at 10.5px.</summary>
         public const double EyebrowTracking = 1.47;
@@ -370,8 +427,11 @@ public static class Tokens
         /// <summary>Inner panels. <c>--radius-md</c>.</summary>
         public const double Inner = 10;
 
-        /// <summary>Cards and inputs. <c>--radius-lg</c>.</summary>
+        /// <summary>Cards and inputs in the app. <c>--radius-lg</c>.</summary>
         public const double Card = 12;
+
+        /// <summary>Top-level cards and panels on the site. <c>--r-card</c>.</summary>
+        public const double CardLarge = 20;
 
         /// <summary>Buttons, badges, nav pills, switches.</summary>
         public const double Pill = 999;
@@ -393,6 +453,11 @@ public static class Tokens
     /// <summary>The shadows, each copied from its CSS declaration.</summary>
     public static class Shadow
     {
+        /// <summary><c>--shadow-soft</c> on the site: chips and floating panels.</summary>
+        public static BoxShadows Soft => new(
+            Layer(1, 2, 0x000000, 0.03),
+            [Layer(4, 16, 0x000000, 0.04), Layer(12, 32, 0x000000, 0.03)]);
+
         /// <summary><c>--sg-surface-shadow</c>: the card at rest. Tight, three layers.</summary>
         public static BoxShadows Card => new(
             Layer(2, 4, 0x0F172A, 0.035),
@@ -553,6 +618,27 @@ public static class Tokens
 
         /// <summary>The logo tile in the caption.</summary>
         public const double LogoTile = 26;
+
+        /// <summary>Hero grid pitch. <c>.grid-pattern</c> 56px.</summary>
+        public const double GridPitch = 56;
+
+        /// <summary>The white coin inside the hero button. <c>.button-coin</c> 40px.</summary>
+        public const double Coin = 32;
+
+        /// <summary>Hero pill left padding, where the label carries the weight. <c>2.25rem</c>.</summary>
+        public const double HeroPadLeft = 30;
+
+        /// <summary>Hero pill right padding, hugging the coin. <c>0.5rem</c>.</summary>
+        public const double HeroPadRight = 6;
+
+        /// <summary>Badge padding. <c>0.5625rem 1.375rem</c>.</summary>
+        public const double BadgePadX = 18;
+
+        /// <summary>Badge height.</summary>
+        public const double BadgeHeight = 34;
+
+        /// <summary>Nav underline thickness.</summary>
+        public const double NavUnderline = 2;
 
         /// <summary>Horizontal room a scrolling list keeps for its cards' shadows.</summary>
         public const double ScrollGutter = 8;

@@ -29,10 +29,10 @@ public sealed class DictionaryView : UserControl
 
         _search = Field.Search("Search dictionary");
         _search.TextChanged += (_, _) => Refresh();
+        _search.Width = Tokens.Layout.ContentMaxWidth / 3;
 
         var add = new SgButton("Add word", SgButton.Kind.Primary);
         add.Click += (_, _) => ShowEditor(null);
-        add.Margin = new Thickness(Tokens.Space.Base, 0, 0, 0);
 
         _list = new StackPanel { Spacing = Tokens.Space.Snug, Margin = new Thickness(0, Tokens.Space.Roomy, 0, Tokens.Space.Roomy) };
         _count = Text.Caption(string.Empty);
@@ -44,7 +44,7 @@ public sealed class DictionaryView : UserControl
         {
             Children =
             {
-                Panels.Docked(Gutter(Panels.Split(_search, add)), Dock.Top),
+                Panels.Docked(Gutter(Panels.Split(new Badge("Dictionary"), Panels.Row(Tokens.Space.Base, _search, add))), Dock.Top),
                 Panels.Docked(Gutter(Panels.Split(_count, open)), Dock.Bottom),
                 new ScrollViewer { Content = _list, Padding = new Thickness(Tokens.Layout.ScrollGutter, 0) },
             },
@@ -108,7 +108,10 @@ public sealed class DictionaryView : UserControl
         var left = Panels.Row(Tokens.Space.Base, kind, text);
         var right = Panels.Row(Tokens.Space.Snug, edit, delete, toggle);
 
-        var card = Card.Standard(Panels.Split(left, right), Tokens.Space.Base);
+        var card = Card.Standard(Panels.Split(left, right), Tokens.Space.Roomy);
+        card.CornerRadius = new CornerRadius(Tokens.Radius.CardLarge);
+        card.BorderBrush = Tokens.Brushes.Line;
+        card.BoxShadow = Tokens.Shadow.Soft;
         card.Opacity = entry.IsEnabled ? 1 : Tokens.Opacity.Disabled;
         return card;
     }

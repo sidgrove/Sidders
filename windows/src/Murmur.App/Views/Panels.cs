@@ -92,6 +92,7 @@ internal static class Panels
                 body,
             },
         });
+        card.CornerRadius = new CornerRadius(Tokens.Radius.CardLarge);
         card.Margin = new Thickness(Tokens.Layout.ScrollGutter, Tokens.Space.Roomy);
         return card;
     }

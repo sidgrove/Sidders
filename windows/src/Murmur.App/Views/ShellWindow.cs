@@ -49,16 +49,8 @@ public abstract class ShellWindow : Window
 
     private Border BuildCaption(string title, Control? trailing)
     {
-        var name = Text.CaptionTitle(title);
-        name.VerticalAlignment = VerticalAlignment.Center;
-
-        var left = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Base,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { new LogoMark { VerticalAlignment = VerticalAlignment.Center }, name },
-        };
+        // The site's header: the wordmark alone on the left, nav on the right.
+        var left = Wordmark.Make(title);
 
         var glyphs = new StackPanel
         {
@@ -84,7 +76,7 @@ public abstract class ShellWindow : Window
         var right = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Roomy,
+            Spacing = Tokens.Space.Section,
             VerticalAlignment = VerticalAlignment.Center,
         };
         if (trailing is not null) right.Children.Add(trailing);
@@ -94,7 +86,7 @@ public abstract class ShellWindow : Window
         var strip = new Border
         {
             Height = Tokens.Layout.CaptionHeight,
-            Padding = new Thickness(Tokens.Space.Wide, 0, Tokens.Space.Base, 0),
+            Padding = new Thickness(Tokens.Space.Section, 0, Tokens.Space.Base, 0),
             Background = Tokens.Brushes.None,
             Child = new DockPanel { Children = { right, left } },
         };
