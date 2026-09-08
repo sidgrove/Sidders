@@ -51,7 +51,7 @@ public sealed class DictionaryView : UserControl
             },
         };
 
-        _file.Changed += (_, _) => Refresh();
+        _file.Changed += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
         Refresh();
     }
 

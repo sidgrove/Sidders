@@ -48,7 +48,9 @@ public sealed class TranscriptionsView : UserControl
             },
         };
 
-        _store.Changed += (_, _) => Refresh();
+        // The store changes on the engine's thread when a dictation completes; the list
+        // must only be rebuilt on the UI thread.
+        _store.Changed += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
         Refresh();
     }
 
