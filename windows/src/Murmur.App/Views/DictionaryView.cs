@@ -36,7 +36,7 @@ public sealed class DictionaryView : UserControl
         add.Click += (_, _) => ShowEditor(null);
 
         _list = new StackPanel { Spacing = Tokens.Space.Tight, Margin = new Thickness(Tokens.Space.Base) };
-        _count = new Silkscreen { Foreground = new SolidColorBrush(Tokens.Colors.InkOnDeck, 0.5) };
+        _count = new Silkscreen { Foreground = Tokens.Brushes.InkOnDeckDim };
 
         var reveal = Panels.DeckButton("OPEN DICTIONARY.TXT");
         reveal.Click += (_, _) => OpenInEditor(_file.FilePath);
@@ -54,6 +54,16 @@ public sealed class DictionaryView : UserControl
         _file.Changed += (_, _) => Refresh();
         Refresh();
     }
+
+    /// <summary>Puts the caret in the search field.</summary>
+    public void FocusSearch()
+    {
+        _search.Focus();
+        _search.SelectAll();
+    }
+
+    /// <summary>Opens the editor on a blank entry.</summary>
+    public void AddEntry() => ShowEditor(null);
 
     private void Refresh()
     {
@@ -97,15 +107,15 @@ public sealed class DictionaryView : UserControl
                 {
                     IsLit = entry.IsEnabled,
                     LampColor = Tokens.Colors.MeterGreen,
-                    Width = 6,
-                    Height = 6,
+                    Width = Tokens.Material.LampSizeSmall,
+                    Height = Tokens.Material.LampSizeSmall,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
                 new Silkscreen
                 {
                     Text = entry.Kind == EntryKind.Correction ? "FIX" : "TERM",
-                    Foreground = new SolidColorBrush(Tokens.Colors.InkOnDeck, 0.5),
-                    Width = 34,
+                    Foreground = Tokens.Brushes.InkOnDeckDim,
+                    Width = Tokens.Layout.KindTagWidth,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
                 new TextBlock
@@ -134,7 +144,7 @@ public sealed class DictionaryView : UserControl
             Background = Tokens.Brushes.Deck,
             CornerRadius = new CornerRadius(Tokens.Radius.Chip),
             Padding = new Thickness(Tokens.Space.Base, Tokens.Space.Snug),
-            Opacity = entry.IsEnabled ? 1 : 0.45,
+            Opacity = entry.IsEnabled ? 1 : Tokens.Opacity.Disabled,
             Child = new Grid { Children = { left, right } },
         };
     }
@@ -180,7 +190,7 @@ public sealed class DictionaryView : UserControl
 /// <summary>
 /// Add or edit one dictionary entry, with the false-positive warning shown live.
 /// </summary>
-public sealed class DictionaryEditorWindow : Window
+public sealed class DictionaryEditorWindow : UnitWindow
 {
     private readonly TransportKey _termKey;
     private readonly TransportKey _correctionKey;
@@ -204,10 +214,11 @@ public sealed class DictionaryEditorWindow : Window
         _kind = entry?.Kind ?? EntryKind.Term;
 
         Title = entry is null ? "New entry" : "Edit entry";
-        Width = 460;
+        ModelNumber = entry is null ? "NEW ENTRY" : "EDIT ENTRY";
+        IsResizableUnit = false;
+        Width = Tokens.Layout.EditorWidth;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
-        Background = Tokens.Brushes.Chassis;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         _termKey = new TransportKey { Content = "TERM", EngagedColor = Tokens.Colors.Ink };
@@ -233,7 +244,7 @@ public sealed class DictionaryEditorWindow : Window
             Close();
         };
 
-        Content = BuildContent(cancel);
+        Content = Frame("Murmur", BuildContent(cancel));
         SetKind(_kind);
     }
 
@@ -306,7 +317,7 @@ public sealed class DictionaryEditorWindow : Window
         {
             _warnings.Children.Add(new Border
             {
-                BorderBrush = new SolidColorBrush(Tokens.Colors.MeterAmber, 0.4),
+                BorderBrush = new SolidColorBrush(Tokens.Colors.MeterAmber, Tokens.Opacity.Faint),
                 BorderThickness = new Thickness(Tokens.Border.Hairline),
                 CornerRadius = new CornerRadius(Tokens.Radius.Chip),
                 Padding = new Thickness(Tokens.Space.Snug),
@@ -320,8 +331,8 @@ public sealed class DictionaryEditorWindow : Window
                         {
                             IsLit = true,
                             LampColor = Tokens.Colors.MeterAmber,
-                            Width = 6,
-                            Height = 6,
+                            Width = Tokens.Material.LampSizeSmall,
+                            Height = Tokens.Material.LampSizeSmall,
                             VerticalAlignment = VerticalAlignment.Top,
                             Margin = new Thickness(0, Tokens.Space.Tight, 0, 0),
                         },
@@ -332,7 +343,7 @@ public sealed class DictionaryEditorWindow : Window
                             FontSize = Tokens.Fonts.Label,
                             Foreground = Tokens.Brushes.Ink,
                             TextWrapping = TextWrapping.Wrap,
-                            MaxWidth = 340,
+                            MaxWidth = Tokens.Layout.NoteMaxWidth,
                         },
                     },
                 },

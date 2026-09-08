@@ -115,7 +115,7 @@ public static class SelfTest
         var failures = Check("Windows platform assembly loads from the bundle", PlatformFactory.IsAvailable);
         if (!PlatformFactory.IsAvailable) return failures;
 
-        failures += Check("audio capture constructs", PlatformFactory.CreateAudioCapture() is not null);
+        failures += Check("audio capture constructs", PlatformFactory.CreateAudioCapture(static () => null) is not null);
         failures += Check("text injector constructs", PlatformFactory.CreateTextInjector() is not null);
 
         // Constructed, not started: installing a real low-level keyboard hook on a CI runner
@@ -123,6 +123,33 @@ public static class SelfTest
         var hotkey = PlatformFactory.CreateHotkeySource(0xA3);
         failures += Check("hotkey source constructs with Right Ctrl", hotkey is not null);
         hotkey?.Dispose();
+
+        // Enumerating microphones actually calls into NAudio, which is what proves the
+        // assembly resolver works out of the bundle. A runner has no microphone and that is
+        // fine — an empty list is a pass, an exception is not.
+        var catalog = PlatformFactory.CreateAudioDeviceCatalog();
+        failures += Check("audio device catalog constructs", catalog is not null);
+        if (catalog is not null)
+        {
+            try
+            {
+                var devices = catalog.ListCaptureDevices();
+                Console.WriteLine($"  microphones: {devices.Count}");
+                foreach (var device in devices)
+                {
+                    Console.WriteLine($"    {(device.IsDefault ? "*" : " ")} {device.Name}");
+                }
+                failures += Check("microphones enumerate through NAudio", true);
+            }
+            catch (Exception e) when (e is IOException or TypeLoadException or System.Reflection.TargetInvocationException)
+            {
+                Console.WriteLine($"  {e.GetType().Name}: {e.Message}");
+                failures += Check("microphones enumerate through NAudio", false);
+            }
+        }
+
+        failures += Check("startup registration constructs", PlatformFactory.CreateStartupRegistration() is not null);
+        failures += Check("window tweaks construct", PlatformFactory.CreateWindowTweaks() is not null);
 
         return failures;
     }

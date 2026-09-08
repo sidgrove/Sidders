@@ -19,6 +19,16 @@ public sealed record SettingsData
     /// <summary>Where the speech model lives, or null to search the default locations.</summary>
     public string? ModelDirectory { get; init; }
 
+    /// <summary>
+    /// The microphone to record from, as an OS device id, or null for the system's default
+    /// communications device.
+    /// </summary>
+    /// <remarks>
+    /// Read on every recording rather than once at startup, so picking a different
+    /// microphone in Settings takes effect on the next key press.
+    /// </remarks>
+    public string? MicrophoneDeviceId { get; init; }
+
     /// <summary>Whether to type the transcript into the focused app.</summary>
     public bool InjectText { get; init; } = true;
 

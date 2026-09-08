@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -15,8 +17,9 @@ namespace Murmur.App.Views;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Laid out the way a deck is: transport and meter across the top on the panel itself, then a
-/// recessed well below holding whichever section is selected.
+/// Laid out the way a deck is: caption strip and menu row on the chassis, the transport,
+/// meter, counter and indicator cluster on a brushed panel, then a recessed well below
+/// holding whichever section is selected.
 /// </para>
 /// <para>
 /// Built in code rather than XAML, deliberately. Every value comes from <see cref="Tokens"/>,
@@ -24,21 +27,32 @@ namespace Murmur.App.Views;
 /// the design system. In C# a stray number is visible in review.
 /// </para>
 /// </remarks>
-public sealed class MainWindow : Window
+public sealed class MainWindow : UnitWindow
 {
+    private const string ModelGuideUrl = "https://github.com/per-simmons/murmur-youtube/blob/main/docs/PARAKEET-WINDOWS.md";
+
     private readonly Composition? _composition;
     private readonly TransportKey _recordKey;
     private readonly Lamp _recordLamp;
     private readonly VuMeter _meter;
-    private readonly TextBlock _counter;
+    private readonly SegmentReadout _counter;
+    private readonly LevelTrace _trace;
+    private readonly Silkscreen _mode;
     private readonly ContentControl _sectionHost;
     private readonly TransportKey _transcriptionsKey;
     private readonly TransportKey _dictionaryKey;
-    private readonly DispatcherTimer _counterTimer;
+    private readonly Lamp _hookLamp;
+    private readonly Lamp _micLamp;
+    private readonly Lamp _modelLamp;
+    private readonly Border _faultStrip;
+    private readonly TextBlock _faultText;
+    private readonly DispatcherTimer _poll;
+    private readonly OverlayWindow? _overlay;
 
-    private Control? _transcriptionsView;
-    private Control? _dictionaryView;
+    private TranscriptionsView? _transcriptionsView;
+    private DictionaryView? _dictionaryView;
     private DateTimeOffset? _startedAt;
+    private bool _modelReady;
 
     /// <summary>Builds a window with no engine behind it. Used by headless tests.</summary>
     public MainWindow() : this(null) { }
@@ -49,76 +63,161 @@ public sealed class MainWindow : Window
         _composition = composition;
 
         Title = "Murmur";
-        MinWidth = 720;
-        MinHeight = 520;
-        Width = 880;
-        Height = 640;
-        Background = Tokens.Brushes.Chassis;
+        ModelNumber = "PD-26  ·  PORTABLE DICTATION UNIT";
+        MinWidth = Tokens.Layout.MainMinWidth;
+        MinHeight = Tokens.Layout.MainMinHeight;
+        Width = Tokens.Layout.MainWidth;
+        Height = Tokens.Layout.MainHeight;
 
-        _recordKey = new TransportKey { Content = "RECORD" };
+        _recordKey = new TransportKey { Content = "RECORD", MinWidth = Tokens.Material.RecordKeyMinWidth };
         _recordKey.Click += (_, _) => ToggleRecording();
 
         _recordLamp = new Lamp { LampColor = Tokens.Colors.Record };
-        _meter = new VuMeter { Width = 168, Height = 54 };
+        _meter = new VuMeter();
+        _counter = new SegmentReadout { Text = "00:00" };
+        _trace = new LevelTrace();
+        _mode = new Silkscreen { Text = "STOP", Foreground = Tokens.Brushes.InkOnDeckDim };
 
-        _counter = new TextBlock
-        {
-            Text = "00:00",
-            FontFamily = Tokens.Fonts.Mono,
-            FontSize = Tokens.Fonts.CounterLarge,
-            Foreground = Tokens.Brushes.InkOnDeck,
-        };
+        _hookLamp = new Lamp { LampColor = Tokens.Colors.MeterGreen, Width = Tokens.Material.LampSizeSmall, Height = Tokens.Material.LampSizeSmall };
+        _micLamp = new Lamp { LampColor = Tokens.Colors.MeterGreen, Width = Tokens.Material.LampSizeSmall, Height = Tokens.Material.LampSizeSmall };
+        _modelLamp = new Lamp { LampColor = Tokens.Colors.MeterAmber, Width = Tokens.Material.LampSizeSmall, Height = Tokens.Material.LampSizeSmall };
 
-        _transcriptionsKey = new TransportKey { Content = "TRANSCRIPTIONS", IsEngaged = true };
-        _dictionaryKey = new TransportKey { Content = "DICTIONARY" };
+        _transcriptionsKey = new TransportKey { Content = "TRANSCRIPTIONS", IsEngaged = true, EngagedColor = Tokens.Colors.Ink };
+        _dictionaryKey = new TransportKey { Content = "DICTIONARY", EngagedColor = Tokens.Colors.Ink };
         _transcriptionsKey.Click += (_, _) => ShowSection(transcriptions: true);
         _dictionaryKey.Click += (_, _) => ShowSection(transcriptions: false);
+
+        _faultText = new TextBlock
+        {
+            FontFamily = Tokens.Fonts.Grotesque,
+            FontSize = Tokens.Fonts.Label,
+            Foreground = Tokens.Brushes.InkOnDeck,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _faultStrip = BuildFaultStrip();
 
         _sectionHost = new ContentControl();
 
         // The meter and counter are polled rather than pushed. The engine raises Changed on
         // a background thread at buffer rate, and marshalling every one of those to the UI
         // thread would be far more traffic than a display refresh needs.
-        _counterTimer = new DispatcherTimer(DispatcherPriority.Background)
+        _poll = new DispatcherTimer(DispatcherPriority.Background) { Interval = Tokens.Motion.PanelPoll };
+        _poll.Tick += (_, _) => SyncFromEngine();
+        _poll.Start();
+
+        if (_composition is not null)
         {
-            Interval = TimeSpan.FromMilliseconds(100),
-        };
-        _counterTimer.Tick += (_, _) => SyncFromEngine();
-        _counterTimer.Start();
-
-        Content = BuildLayout();
-        ShowSection(transcriptions: true);
-
-        if (_composition?.Engine is not null) _composition.Engine.Start();
-    }
-
-    private DockPanel BuildLayout()
-    {
-        var root = new DockPanel { Margin = new Thickness(Tokens.Space.Roomy) };
-
-        root.Children.Add(Panels.Docked(BuildTransportPanel(), Dock.Top));
-        root.Children.Add(Panels.Docked(BuildSectionKeys(), Dock.Top));
-
-        if (_composition is not null && !Composition.IsModelInstalled)
-        {
-            root.Children.Add(Panels.Docked(BuildModelBanner(), Dock.Top));
+            _overlay = new OverlayWindow(PlatformFactory.CreateWindowTweaks());
         }
 
-        root.Children.Add(BuildWell(_sectionHost));
+        Content = Frame("Murmur", BuildBody());
+        ShowSection(transcriptions: true);
+
+        if (_composition?.Engine is { } engine)
+        {
+            engine.Faulted += (_, message) => Dispatcher.UIThread.Post(() => ShowFault(message));
+            engine.Start();
+            _modelLamp.IsLit = Composition.IsModelInstalled;
+            _ = PreloadAsync(engine);
+        }
+        else
+        {
+            _modelLamp.IsLit = false;
+        }
+    }
+
+    private async Task PreloadAsync(DictationEngine engine)
+    {
+        _modelReady = await engine.PreloadAsync(CancellationToken.None).ConfigureAwait(true);
+        _modelLamp.LampColor = _modelReady ? Tokens.Colors.MeterGreen : Tokens.Colors.MeterAmber;
+        _modelLamp.IsLit = true;
+    }
+
+    /// <summary>Re-checks the model after a download from Settings.</summary>
+    public void ModelChanged()
+    {
+        if (_composition?.Engine is { } engine) _ = PreloadAsync(engine);
+    }
+
+    private DockPanel BuildBody()
+    {
+        var root = new DockPanel();
+
+        root.Children.Add(Panels.Docked(BuildMenuRow(), Dock.Top));
+
+        var panelArea = new DockPanel { Margin = new Thickness(Tokens.Space.Roomy, Tokens.Space.Base, Tokens.Space.Roomy, Tokens.Space.Roomy) };
+        panelArea.Children.Add(Panels.Docked(BuildTransportPanel(), Dock.Top));
+        panelArea.Children.Add(Panels.Docked(BuildSectionRow(), Dock.Top));
+        panelArea.Children.Add(Panels.Docked(_faultStrip, Dock.Top));
+        panelArea.Children.Add(BuildWell(_sectionHost));
+
+        root.Children.Add(panelArea);
         return root;
     }
 
-    /// <summary>Record/stop, the record lamp, the level meter and the tape counter.</summary>
+    private Border BuildMenuRow()
+    {
+        var menu = new PanelMenu(this,
+        [
+            new MenuGroup("File",
+            [
+                new MenuEntry("New dictionary entry", new KeyGesture(Key.N, KeyModifiers.Control), () => { ShowSection(false); _dictionaryView?.AddEntry(); }),
+                new MenuEntry("Open dictionary.txt", null, () => OpenPath(_composition?.Dictionary.FilePath)),
+                new MenuEntry("Open data folder", null, () => OpenPath(Path.GetDirectoryName(AppSettings.DefaultPath))),
+                MenuEntry.Separator,
+                new MenuEntry("Settings", new KeyGesture(Key.OemComma, KeyModifiers.Control), ShowSettings),
+                MenuEntry.Separator,
+                new MenuEntry("Hide to tray", new KeyGesture(Key.W, KeyModifiers.Control), Hide),
+                new MenuEntry("Quit Murmur", new KeyGesture(Key.Q, KeyModifiers.Control), App.Quit),
+            ]),
+            new MenuGroup("Edit",
+            [
+                new MenuEntry("Copy last transcription", new KeyGesture(Key.C, KeyModifiers.Control | KeyModifiers.Shift), CopyLast),
+                new MenuEntry("Find", new KeyGesture(Key.F, KeyModifiers.Control), FocusSearch),
+                MenuEntry.Separator,
+                new MenuEntry("Delete all transcriptions", null, () => _composition?.Transcripts.Clear()),
+            ]),
+            new MenuGroup("View",
+            [
+                new MenuEntry("Transcriptions", new KeyGesture(Key.D1, KeyModifiers.Control), () => ShowSection(true)),
+                new MenuEntry("Dictionary", new KeyGesture(Key.D2, KeyModifiers.Control), () => ShowSection(false)),
+            ]),
+            new MenuGroup("Transport",
+            [
+                new MenuEntry("Record / Stop", new KeyGesture(Key.R, KeyModifiers.Control), ToggleRecording),
+                MenuEntry.Separator,
+                new MenuEntry("Reload speech model", null, ModelChanged),
+            ]),
+            new MenuGroup("Help",
+            [
+                new MenuEntry("Speech model guide", null, () => OpenPath(ModelGuideUrl)),
+                new MenuEntry("Open log", null, () => OpenPath(Log.Path)),
+                MenuEntry.Separator,
+                new MenuEntry("About Murmur", new KeyGesture(Key.F1), ShowAbout),
+            ]),
+        ]);
+
+        return new Border
+        {
+            Background = Tokens.Brushes.Chassis,
+            BorderBrush = new SolidColorBrush(Tokens.Colors.Seam),
+            BorderThickness = new Thickness(0, 0, 0, Tokens.Border.Seam),
+            Padding = new Thickness(Tokens.Space.Snug, 0),
+            Child = menu,
+        };
+    }
+
+    /// <summary>Record/stop, the record lamp, the level meter, the counter and the indicator cluster.</summary>
     private BrushedPanel BuildTransportPanel()
     {
-        var row = new StackPanel
+        var row = new Grid
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Wide,
-            Margin = new Thickness(Tokens.Space.Roomy),
+            Margin = new Thickness(Tokens.Space.Wide, Tokens.Space.Roomy),
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto"),
         };
 
-        row.Children.Add(Panels.Labelled("TRANSPORT", new StackPanel
+        var transport = Panels.Labelled("TRANSPORT", new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = Tokens.Space.Snug,
@@ -133,77 +232,145 @@ public sealed class MainWindow : Window
                     Children = { _recordLamp, new Silkscreen { Text = "REC" } },
                 },
             },
+        });
+        transport.VerticalAlignment = VerticalAlignment.Top;
+        Grid.SetColumn(transport, 0);
+
+        var level = Panels.Labelled("LEVEL", _meter);
+        level.Margin = new Thickness(Tokens.Space.Wide, 0, 0, 0);
+        Grid.SetColumn(level, 1);
+
+        var counter = Panels.Labelled("COUNTER", Deck(new StackPanel
+        {
+            Spacing = Tokens.Space.Snug,
+            Children =
+            {
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = Tokens.Space.Base,
+                    Children = { _counter, _mode },
+                },
+                _trace,
+            },
         }));
+        counter.Margin = new Thickness(Tokens.Space.Wide, 0, 0, 0);
+        Grid.SetColumn(counter, 2);
 
-        row.Children.Add(Panels.Labelled("LEVEL", _meter));
-        row.Children.Add(Panels.Labelled("COUNTER", Deck(_counter)));
+        var cluster = new StackPanel
+        {
+            Spacing = Tokens.Space.Base,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children =
+            {
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = Tokens.Space.Base,
+                    Children =
+                    {
+                        Indicator("POWER", new Lamp { LampColor = Tokens.Colors.MeterGreen, IsLit = true, Width = Tokens.Material.LampSizeSmall, Height = Tokens.Material.LampSizeSmall }),
+                        Indicator("HOOK", _hookLamp),
+                        Indicator("MIC", _micLamp),
+                        Indicator("MODEL", _modelLamp),
+                    },
+                },
+                new Vents { Count = 12, HorizontalAlignment = HorizontalAlignment.Right },
+            },
+        };
+        Grid.SetColumn(cluster, 4);
 
+        row.Children.Add(transport);
+        row.Children.Add(level);
+        row.Children.Add(counter);
+        row.Children.Add(cluster);
+
+        return new BrushedPanel
+        {
+            HasScrews = true,
+            Child = row,
+            Margin = new Thickness(0, 0, 0, Tokens.Space.Base),
+        };
+    }
+
+    private static StackPanel Indicator(string label, Lamp lamp) => new()
+    {
+        Spacing = Tokens.Space.Tight,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        Children =
+        {
+            new Border { Child = lamp, HorizontalAlignment = HorizontalAlignment.Center },
+            new Silkscreen { Text = label, HorizontalAlignment = HorizontalAlignment.Center },
+        },
+    };
+
+    private DockPanel BuildSectionRow()
+    {
         var settings = new TransportKey { Content = "SETTINGS" };
         settings.Click += (_, _) => ShowSettings();
 
-        row.Children.Add(new StackPanel
+        var right = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Base,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Children = { settings, new Vents { Count = 8, VerticalAlignment = VerticalAlignment.Center } },
-        });
+            Spacing = Tokens.Space.Snug,
+            Children = { settings },
+        };
+        DockPanel.SetDock(right, Dock.Right);
 
-        return new BrushedPanel { Child = row, Margin = new Thickness(0, 0, 0, Tokens.Space.Base) };
-    }
-
-    private StackPanel BuildSectionKeys() => new()
-    {
-        Orientation = Orientation.Horizontal,
-        Spacing = Tokens.Space.Snug,
-        Margin = new Thickness(0, 0, 0, Tokens.Space.Base),
-        Children = { _transcriptionsKey, _dictionaryKey },
-    };
-
-    /// <summary>
-    /// A standing notice that the app cannot transcribe yet.
-    /// </summary>
-    /// <remarks>
-    /// Unlike macOS, Windows has no built-in engine to fall back on, so a missing model means
-    /// the app does nothing at all. That has to be visible on the front panel rather than
-    /// buried in Settings.
-    /// </remarks>
-    private static BrushedPanel BuildModelBanner() => new()
-    {
-        Margin = new Thickness(0, 0, 0, Tokens.Space.Base),
-        Child = new StackPanel
+        return new DockPanel
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Base,
-            Margin = new Thickness(Tokens.Space.Base),
+            Margin = new Thickness(0, 0, 0, Tokens.Space.Base),
             Children =
             {
-                new Lamp
+                right,
+                new StackPanel
                 {
-                    IsLit = true,
-                    LampColor = Tokens.Colors.MeterAmber,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-                new TextBlock
-                {
-                    Text = "Speech model not installed — Murmur cannot transcribe yet. "
-                         + "See Settings, or docs/PARAKEET-WINDOWS.md.",
-                    FontFamily = Tokens.Fonts.Grotesque,
-                    FontSize = Tokens.Fonts.Label,
-                    Foreground = Tokens.Brushes.Ink,
-                    TextWrapping = TextWrapping.Wrap,
-                    VerticalAlignment = VerticalAlignment.Center,
+                    Orientation = Orientation.Horizontal,
+                    Spacing = Tokens.Space.Snug,
+                    Children = { _transcriptionsKey, _dictionaryKey },
                 },
             },
-        },
-    };
+        };
+    }
+
+    /// <summary>A strip on the deck that carries the most recent fault until dismissed.</summary>
+    private Border BuildFaultStrip()
+    {
+        var dismiss = Panels.DeckButton("DISMISS");
+        dismiss.Click += (_, _) => _faultStrip.IsVisible = false;
+        DockPanel.SetDock(dismiss, Dock.Right);
+
+        var lamp = new Lamp
+        {
+            IsLit = true,
+            LampColor = Tokens.Colors.MeterAmber,
+            Width = Tokens.Material.LampSizeSmall,
+            Height = Tokens.Material.LampSizeSmall,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, Tokens.Space.Base, 0),
+        };
+        DockPanel.SetDock(lamp, Dock.Left);
+
+        return new Border
+        {
+            IsVisible = false,
+            Background = Tokens.Brushes.Deck,
+            CornerRadius = new CornerRadius(Tokens.Radius.Control),
+            BorderBrush = new SolidColorBrush(Tokens.Colors.Seam),
+            BorderThickness = new Thickness(Tokens.Border.Hairline),
+            Padding = new Thickness(Tokens.Space.Base, Tokens.Space.Snug),
+            Margin = new Thickness(0, 0, 0, Tokens.Space.Base),
+            Child = new DockPanel { Children = { dismiss, lamp, _faultText } },
+        };
+    }
 
     /// <summary>A recessed well cut into the panel — content sits inside it.</summary>
     private static Border BuildWell(Control content) => new()
     {
         Background = Tokens.Brushes.Well,
         CornerRadius = new CornerRadius(Tokens.Radius.Panel),
-        BorderBrush = new SolidColorBrush(Tokens.Colors.Seam, 0.55),
+        BorderBrush = new SolidColorBrush(Tokens.Colors.Seam, Tokens.Opacity.Dim),
         BorderThickness = new Thickness(Tokens.Border.Hairline),
         Padding = new Thickness(Tokens.Space.Hair),
         Child = content,
@@ -213,7 +380,7 @@ public sealed class MainWindow : Window
     private static Border Deck(Control content) => new()
     {
         Background = Tokens.Brushes.Deck,
-        CornerRadius = new CornerRadius(Tokens.Radius.Panel),
+        CornerRadius = new CornerRadius(Tokens.Radius.Control),
         BorderBrush = new SolidColorBrush(Tokens.Colors.Seam),
         BorderThickness = new Thickness(Tokens.Border.Hairline),
         Padding = new Thickness(Tokens.Space.Base, Tokens.Space.Snug),
@@ -247,10 +414,50 @@ public sealed class MainWindow : Window
         }
     }
 
+    private void FocusSearch()
+    {
+        if (_sectionHost.Content is TranscriptionsView t) t.FocusSearch();
+        else if (_sectionHost.Content is DictionaryView d) d.FocusSearch();
+    }
+
+    private async void CopyLast()
+    {
+        var records = _composition?.Transcripts.Records;
+        var last = records is { Count: > 0 } ? records[0] : null;
+        if (last is null || Clipboard is null) return;
+        await Clipboard.SetTextAsync(last.Text).ConfigureAwait(true);
+    }
+
     private void ShowSettings()
     {
         if (_composition is null) return;
-        _ = new SettingsWindow(_composition.Settings).ShowDialog(this);
+        var settings = new SettingsWindow(_composition);
+        settings.ModelChanged += (_, _) => ModelChanged();
+        _ = settings.ShowDialog(this);
+    }
+
+    private void ShowAbout() => _ = new AboutWindow().ShowDialog(this);
+
+    private void ShowFault(string message)
+    {
+        _faultText.Text = message;
+        _faultStrip.IsVisible = true;
+    }
+
+    private static void OpenPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+
+        try
+        {
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo(path) { UseShellExecute = true };
+            process.Start();
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"could not open {path}: {e.Message}");
+        }
     }
 
     /// <summary>Pulls state from the engine onto the panel.</summary>
@@ -263,18 +470,37 @@ public sealed class MainWindow : Window
             return;
         }
 
-        var recording = engine.State != DictationState.Idle;
+        var recording = engine.State == DictationState.Recording;
+        var transcribing = engine.State == DictationState.Transcribing;
+        var busy = recording || transcribing;
 
         _meter.Level = engine.Level;
         _meter.IsActive = recording;
-        _recordLamp.IsLit = engine.State == DictationState.Recording;
-        _recordKey.IsEngaged = recording;
-        _recordKey.Content = recording ? "STOP" : "RECORD";
+        _recordLamp.IsLit = recording;
+        _recordKey.IsEngaged = busy;
+        _recordKey.Content = busy ? "STOP" : "RECORD";
+        _mode.Text = transcribing ? "PROC" : recording ? "REC" : "STOP";
+        _mode.Foreground = recording ? Tokens.Brushes.Record : Tokens.Brushes.InkOnDeckDim;
 
-        if (recording && _startedAt is null) _startedAt = DateTimeOffset.Now;
-        else if (!recording) _startedAt = null;
+        _hookLamp.IsLit = engine.IsHotkeyArmed;
+        _hookLamp.LampColor = engine.IsHotkeyArmed ? Tokens.Colors.MeterGreen : Tokens.Colors.MeterAmber;
+        _micLamp.IsLit = recording;
+
+        if (recording) _trace.Push(engine.Level);
+        else if (!busy && _startedAt is not null) _trace.Clear();
+
+        if (busy && _startedAt is null) _startedAt = DateTimeOffset.Now;
+        else if (!busy) _startedAt = null;
 
         UpdateCounter();
+
+        App.SetTrayRecording(recording);
+
+        if (_overlay is not null)
+        {
+            if (busy && !IsActive) { _overlay.Present(); _overlay.Sync(recording, transcribing, engine.Level, _counter.Text); }
+            else if (_overlay.IsVisible) _overlay.Hide();
+        }
     }
 
     private void UpdateCounter()
@@ -297,6 +523,7 @@ public sealed class MainWindow : Window
             _recordKey.IsEngaged = IsRecording;
             _recordLamp.IsLit = IsRecording;
             _meter.IsActive = IsRecording;
+            _mode.Text = IsRecording ? "REC" : "STOP";
             _startedAt = IsRecording ? DateTimeOffset.Now : null;
             return;
         }
@@ -316,10 +543,36 @@ public sealed class MainWindow : Window
     /// <summary>The level meter. Exposed for headless tests.</summary>
     public VuMeter Meter => _meter;
 
+    /// <summary>The tape counter. Exposed for headless tests.</summary>
+    public SegmentReadout Counter => _counter;
+
+    /// <summary>The fault strip. Exposed for headless tests.</summary>
+    public Border FaultStrip => _faultStrip;
+
+    /// <summary>Shows a fault on the panel. Exposed for headless tests.</summary>
+    public void ReportFault(string message) => ShowFault(message);
+
+    /// <inheritdoc />
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        // Closing the window leaves Murmur in the tray — the hotkey still works, which is
+        // the whole point. Quit is explicit, from the menu or the tray. Hiding rather than
+        // closing also matters mechanically: Avalonia cannot re-show a closed window.
+        if (!App.IsQuitting && _composition is not null)
+        {
+            e.Cancel = true;
+            Hide();
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
     /// <inheritdoc />
     protected override void OnClosed(EventArgs e)
     {
-        _counterTimer.Stop();
+        _poll.Stop();
+        _overlay?.Close();
         base.OnClosed(e);
     }
 }

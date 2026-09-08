@@ -75,8 +75,8 @@ public sealed class MainWindowTests
         var window = new MainWindow();
         window.Show();
 
-        window.MinWidth.ShouldBe(720);
-        window.MinHeight.ShouldBe(520);
+        window.MinWidth.ShouldBe(Tokens.Layout.MainMinWidth);
+        window.MinHeight.ShouldBe(Tokens.Layout.MainMinHeight);
     }
 }
 
@@ -186,5 +186,70 @@ public sealed class DesignSystemTests
         Tokens.Motion.NeedleAttackSeconds.ShouldBe(0.30);
         Tokens.Motion.NeedleReleaseSeconds.ShouldBeGreaterThan(Tokens.Motion.NeedleAttackSeconds);
         Tokens.Motion.NeedleOvershoot.ShouldBeGreaterThan(0);
+    }
+}
+
+/// <summary>The controls added for the Windows front panel.</summary>
+public sealed class FrontPanelTests
+{
+    [AvaloniaFact]
+    public void Segment_readout_measures_from_the_token_geometry()
+    {
+        var readout = new SegmentReadout { Text = "12:34" };
+        readout.Measure(Size.Infinity);
+
+        var expected = (4 * Tokens.Material.SegmentDigitAdvance)
+                     + Tokens.Material.SegmentColonAdvance
+                     + (Tokens.Material.SegmentDigitHeight * Tokens.Material.SegmentSlant);
+        // Layout rounding snaps desired sizes to whole pixels.
+        readout.DesiredSize.Width.ShouldBe(expected, 1.0);
+        readout.DesiredSize.Height.ShouldBe(Tokens.Material.SegmentDigitHeight);
+    }
+
+    [AvaloniaFact]
+    public void Level_trace_renders_after_being_fed()
+    {
+        var trace = new LevelTrace();
+        var window = new Window { Content = trace };
+        window.Show();
+
+        for (var i = 0; i < 200; i++) trace.Push(i % 10 / 10.0);
+        trace.Clear();
+
+        trace.Bounds.Width.ShouldBe(Tokens.Material.TraceLength * (Tokens.Material.TraceBarWidth + Tokens.Material.TraceBarGap));
+    }
+
+    [AvaloniaFact]
+    public void A_fault_shows_on_the_panel_and_the_counter_runs_from_the_tokens()
+    {
+        var window = new MainWindow();
+        window.Show();
+
+        window.FaultStrip.IsVisible.ShouldBeFalse();
+        window.ReportFault("The microphone could not be opened.");
+        window.FaultStrip.IsVisible.ShouldBeTrue();
+        window.Counter.Text.ShouldBe("00:00");
+    }
+
+    [AvaloniaFact]
+    public void Caption_keys_and_screws_construct_at_token_sizes()
+    {
+        new CaptionKey().Width.ShouldBe(Tokens.Material.CaptionKeySize);
+        new Screw().Width.ShouldBe(Tokens.Material.ScrewSize);
+    }
+
+    [AvaloniaFact]
+    public void The_only_red_in_the_tokens_is_the_record_lamp_family()
+    {
+        // Instrumentation red is allowed on the VU scale; nothing else may be red-dominant.
+        static bool IsRed(Avalonia.Media.Color c) => c.R > 150 && c.G < 90 && c.B < 90;
+
+        IsRed(Tokens.Colors.Record).ShouldBeTrue();
+        IsRed(Tokens.Colors.MeterRed).ShouldBeTrue();
+        IsRed(Tokens.Colors.Panel).ShouldBeFalse();
+        IsRed(Tokens.Colors.Selection).ShouldBeFalse();
+        IsRed(Tokens.Colors.FocusRing).ShouldBeFalse();
+        IsRed(Tokens.Colors.Hover).ShouldBeFalse();
+        IsRed(Tokens.Colors.MeterAmber).ShouldBeFalse();
     }
 }

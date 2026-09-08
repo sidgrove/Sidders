@@ -5,6 +5,11 @@ the OS, manages its own model assets, and needs no download. There is nothing co
 Windows — so Parakeet is not the optional upgrade it is on macOS, it is the *only* engine.
 The app cannot transcribe until these files are on disk.
 
+> **You normally do not need this page.** Open Murmur, press Ctrl+, and click **DOWNLOAD**
+> under Model. The app fetches these files itself, verifies their sizes, and loads the model
+> without a restart. What follows is for doing it by hand, for an offline machine, or for
+> understanding what the button does.
+
 This page is written to be followed by a person **or handed to a coding agent verbatim**.
 
 ---

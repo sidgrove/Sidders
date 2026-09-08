@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -20,6 +21,10 @@ public sealed class BrushedPanel : Decorator
     public static readonly StyledProperty<double> CornerRadiusProperty =
         AvaloniaProperty.Register<BrushedPanel, double>(nameof(CornerRadius), Tokens.Radius.Panel);
 
+    /// <summary>Whether to draw a screw in each corner.</summary>
+    public static readonly StyledProperty<bool> HasScrewsProperty =
+        AvaloniaProperty.Register<BrushedPanel, bool>(nameof(HasScrews));
+
     /// <inheritdoc cref="CornerRadiusProperty"/>
     public double CornerRadius
     {
@@ -27,7 +32,14 @@ public sealed class BrushedPanel : Decorator
         set => SetValue(CornerRadiusProperty, value);
     }
 
-    static BrushedPanel() => AffectsRender<BrushedPanel>(CornerRadiusProperty);
+    /// <inheritdoc cref="HasScrewsProperty"/>
+    public bool HasScrews
+    {
+        get => GetValue(HasScrewsProperty);
+        set => SetValue(HasScrewsProperty, value);
+    }
+
+    static BrushedPanel() => AffectsRender<BrushedPanel>(CornerRadiusProperty, HasScrewsProperty);
 
     /// <inheritdoc />
     public override void Render(DrawingContext context)
@@ -55,11 +67,59 @@ public sealed class BrushedPanel : Decorator
         }
 
         // Top bevel catches the light; the whole edge carries a seam.
-        var bevel = new Pen(new SolidColorBrush(Tokens.Colors.PanelHighlight, 0.5), Tokens.Border.Bevel);
+        var bevel = new Pen(new SolidColorBrush(Tokens.Colors.PanelHighlight, Tokens.Opacity.Seam), Tokens.Border.Bevel);
         context.DrawLine(bevel, bounds.TopLeft, bounds.TopRight);
 
-        var seam = new Pen(new SolidColorBrush(Tokens.Colors.Seam, 0.35), Tokens.Border.Seam);
+        var seam = new Pen(new SolidColorBrush(Tokens.Colors.Seam, Tokens.Opacity.Faint), Tokens.Border.Seam);
         context.DrawRectangle(null, seam, shape);
+
+        if (!HasScrews) return;
+
+        var inset = Tokens.Material.ScrewInset;
+        Screw.Draw(context, new Point(inset, inset));
+        Screw.Draw(context, new Point(bounds.Width - inset, inset));
+        Screw.Draw(context, new Point(inset, bounds.Height - inset));
+        Screw.Draw(context, new Point(bounds.Width - inset, bounds.Height - inset));
+    }
+}
+
+/// <summary>
+/// A panel screw: a countersunk head with a single slot.
+/// </summary>
+/// <remarks>
+/// Drawn by <see cref="BrushedPanel"/> into its corners. Also usable standalone for the
+/// caption strip. The slot angles differ slightly per screw, as they do on a real unit —
+/// nobody lines them up.
+/// </remarks>
+public sealed class Screw : Control
+{
+    /// <summary>Creates a screw at the token size.</summary>
+    public Screw()
+    {
+        Width = Tokens.Material.ScrewSize;
+        Height = Tokens.Material.ScrewSize;
+    }
+
+    /// <inheritdoc />
+    public override void Render(DrawingContext context) =>
+        Draw(context, new Point(Bounds.Width / 2, Bounds.Height / 2));
+
+    /// <summary>Draws a screw head centred on <paramref name="centre"/>.</summary>
+    public static void Draw(DrawingContext context, Point centre)
+    {
+        var radius = Tokens.Material.ScrewSize / 2;
+
+        // Countersink: a shade ring, then the head slightly lighter than the panel.
+        context.DrawEllipse(new SolidColorBrush(Tokens.Colors.PanelShade), null, centre, radius, radius);
+        context.DrawEllipse(new SolidColorBrush(Tokens.Colors.PanelHighlight), null,
+            new Point(centre.X, centre.Y - Tokens.Border.Hairline / 2), radius - Tokens.Border.Hairline, radius - Tokens.Border.Hairline);
+
+        // The slot. Angle derived from position so each screw sits differently.
+        var angle = ((centre.X * 7) + (centre.Y * 13)) % 180 * Math.PI / 180;
+        var dx = Math.Cos(angle) * (radius - Tokens.Border.Hairline * 1.5);
+        var dy = Math.Sin(angle) * (radius - Tokens.Border.Hairline * 1.5);
+        var slot = new Pen(new SolidColorBrush(Tokens.Colors.Seam, Tokens.Opacity.Dim), Tokens.Border.Hairline);
+        context.DrawLine(slot, new Point(centre.X - dx, centre.Y - dy), new Point(centre.X + dx, centre.Y + dy));
     }
 }
 
@@ -231,19 +291,26 @@ public sealed class TransportKey : Button
         var bounds = new Rect(Bounds.Size);
         if (bounds.Width <= 0 || bounds.Height <= 0) return;
 
-        // The cap sinks by the travel distance while held.
-        var sunk = IsPressed
-            ? bounds.Translate(new Vector(0, Tokens.Material.KeyTravel))
-            : bounds;
+        var down = IsPressed || IsEngaged;
+
+        // The cap sinks by the travel distance while held or latched; the shadow it cast
+        // collapses with it.
+        var sunk = down ? bounds.Translate(new Vector(0, Tokens.Material.KeyTravel)) : bounds;
         var shape = new RoundedRect(sunk, Tokens.Radius.Control);
+
+        var shadowRect = new RoundedRect(
+            bounds.Translate(new Vector(0, down ? Tokens.Border.Hairline : Tokens.Material.KeyTravel + Tokens.Border.Hairline)),
+            Tokens.Radius.Control);
+        context.DrawRectangle(new SolidColorBrush(Avalonia.Media.Colors.Black, down ? 0.22 : 0.35), null, shadowRect);
 
         context.DrawRectangle(Tokens.Brushes.Cap, null, shape);
 
         // Bevel: highlight on top when proud, shade on top when pressed.
-        var bevelColor = IsPressed ? Tokens.Colors.PanelShade : Tokens.Colors.PanelHighlight;
-        context.DrawRectangle(null, new Pen(new SolidColorBrush(bevelColor), Tokens.Border.Bevel), shape);
+        var bevelColor = down ? Tokens.Colors.PanelShade : Tokens.Colors.PanelHighlight;
+        var bevelPen = new Pen(new SolidColorBrush(bevelColor), Tokens.Border.Bevel);
+        context.DrawLine(bevelPen, sunk.TopLeft + new Vector(Tokens.Radius.Control, Tokens.Border.Bevel / 2), sunk.TopRight + new Vector(-Tokens.Radius.Control, Tokens.Border.Bevel / 2));
 
-        var seam = new Pen(new SolidColorBrush(Tokens.Colors.Seam, 0.5), Tokens.Border.Hairline);
+        var seam = new Pen(new SolidColorBrush(Tokens.Colors.Seam, Tokens.Opacity.Seam), Tokens.Border.Hairline);
         context.DrawRectangle(null, seam, shape);
     }
 
@@ -264,7 +331,80 @@ public sealed class TransportKey : Button
 }
 
 /// <summary>
-/// A VU meter with a real needle.
+/// A window caption key — minimise, maximise, close — drawn as a small square cap on the
+/// chassis rather than the OS's glyph buttons.
+/// </summary>
+public sealed class CaptionKey : Button
+{
+    /// <summary>Which glyph the key carries.</summary>
+    public enum Glyph
+    {
+        /// <summary>A short bar.</summary>
+        Minimise,
+
+        /// <summary>A hollow square.</summary>
+        Maximise,
+
+        /// <summary>A cross.</summary>
+        Close,
+    }
+
+    /// <summary>The glyph.</summary>
+    public static readonly StyledProperty<Glyph> KindProperty =
+        AvaloniaProperty.Register<CaptionKey, Glyph>(nameof(Kind));
+
+    /// <inheritdoc cref="KindProperty"/>
+    public Glyph Kind
+    {
+        get => GetValue(KindProperty);
+        set => SetValue(KindProperty, value);
+    }
+
+    static CaptionKey() => AffectsRender<CaptionKey>(KindProperty, IsPressedProperty, IsPointerOverProperty);
+
+    /// <summary>Creates a caption key at the token size.</summary>
+    public CaptionKey()
+    {
+        Width = Tokens.Material.CaptionKeySize;
+        Height = Tokens.Material.CaptionKeySize;
+        Background = null;
+        BorderBrush = null;
+        Padding = new Thickness(0);
+    }
+
+    /// <inheritdoc />
+    public override void Render(DrawingContext context)
+    {
+        var bounds = new Rect(Bounds.Size);
+        var sunk = IsPressed ? bounds.Translate(new Vector(0, Tokens.Border.Hairline)) : bounds;
+        var shape = new RoundedRect(sunk.Deflate(Tokens.Border.Hairline), Tokens.Radius.Chip);
+
+        var cap = new SolidColorBrush(Tokens.Colors.Cap, IsPointerOver ? 1 : 0.85);
+        context.DrawRectangle(cap, null, shape);
+        context.DrawRectangle(null, new Pen(new SolidColorBrush(Tokens.Colors.Seam, Tokens.Opacity.Dim), Tokens.Border.Hairline), shape);
+
+        var ink = new Pen(new SolidColorBrush(Tokens.Colors.Ink), Tokens.Border.Hairline);
+        var c = new Point(sunk.Width / 2, sunk.Height / 2 + (IsPressed ? Tokens.Border.Hairline : 0));
+        var r = Tokens.Material.CaptionKeySize * 0.18;
+
+        switch (Kind)
+        {
+            case Glyph.Minimise:
+                context.DrawLine(ink, new Point(c.X - r, c.Y), new Point(c.X + r, c.Y));
+                break;
+            case Glyph.Maximise:
+                context.DrawRectangle(null, ink, new Rect(c.X - r, c.Y - r, 2 * r, 2 * r));
+                break;
+            case Glyph.Close:
+                context.DrawLine(ink, new Point(c.X - r, c.Y - r), new Point(c.X + r, c.Y + r));
+                context.DrawLine(ink, new Point(c.X - r, c.Y + r), new Point(c.X + r, c.Y - r));
+                break;
+        }
+    }
+}
+
+/// <summary>
+/// A VU meter with a real needle and a printed scale.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -288,6 +428,10 @@ public sealed class VuMeter : Control
     public static readonly StyledProperty<bool> IsActiveProperty =
         AvaloniaProperty.Register<VuMeter, bool>(nameof(IsActive));
 
+    /// <summary>Whether to print the scale numbers. Off for the small overlay face.</summary>
+    public static readonly StyledProperty<bool> ShowScaleProperty =
+        AvaloniaProperty.Register<VuMeter, bool>(nameof(ShowScale), true);
+
     /// <inheritdoc cref="LevelProperty"/>
     public double Level
     {
@@ -302,21 +446,39 @@ public sealed class VuMeter : Control
         set => SetValue(IsActiveProperty, value);
     }
 
+    /// <inheritdoc cref="ShowScaleProperty"/>
+    public bool ShowScale
+    {
+        get => GetValue(ShowScaleProperty);
+        set => SetValue(ShowScaleProperty, value);
+    }
+
+    /// <summary>The scale printing, as fraction of sweep and label. -20 … +3 VU.</summary>
+    private static readonly (double At, string Label)[] Scale =
+    [
+        (0.00, "-20"), (0.22, "-10"), (0.40, "-7"), (0.52, "-5"), (0.63, "-3"),
+        (Tokens.Material.MeterZeroPoint, "0"), (0.86, "+3"),
+    ];
+
     private double _needle;
     private double _velocity;
     private DispatcherTimer? _ticker;
 
-    static VuMeter() => AffectsRender<VuMeter>(IsActiveProperty);
+    static VuMeter() => AffectsRender<VuMeter>(IsActiveProperty, ShowScaleProperty);
+
+    /// <summary>Creates a meter at the front-panel size.</summary>
+    public VuMeter()
+    {
+        Width = Tokens.Material.MeterWidth;
+        Height = Tokens.Material.MeterHeight;
+    }
 
     /// <inheritdoc />
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
 
-        _ticker = new DispatcherTimer(DispatcherPriority.Render)
-        {
-            Interval = TimeSpan.FromMilliseconds(16),
-        };
+        _ticker = new DispatcherTimer(DispatcherPriority.Render) { Interval = Tokens.Motion.Frame };
         _ticker.Tick += (_, _) => { AdvanceNeedle(); InvalidateVisual(); };
         _ticker.Start();
     }
@@ -348,47 +510,257 @@ public sealed class VuMeter : Control
         var bounds = new Rect(Bounds.Size);
         if (bounds.Width <= 0 || bounds.Height <= 0) return;
 
-        context.DrawRectangle(
-            Tokens.Brushes.MeterFace, null, new RoundedRect(bounds, Tokens.Radius.Chip));
+        var face = new RoundedRect(bounds, Tokens.Radius.Chip);
+        context.DrawRectangle(Tokens.Brushes.MeterFace, null, face);
 
         if (IsActive)
         {
-            var lamp = new SolidColorBrush(Tokens.Colors.MeterLamp, 0.14);
-            context.DrawRectangle(lamp, null, new RoundedRect(bounds, Tokens.Radius.Chip));
+            context.DrawRectangle(new SolidColorBrush(Tokens.Colors.MeterLamp, Tokens.Opacity.MeterWash), null, face);
         }
 
         // The pivot sits just below the face, so the needle sweeps across it like a real
         // moving-coil movement rather than rotating about its centre.
-        var pivot = new Point(bounds.Width / 2, bounds.Height * 1.05);
-        var radius = Math.Min(bounds.Width * 0.46, bounds.Height * 0.92);
+        var pivot = new Point(bounds.Width / 2, bounds.Height * 1.08);
+        var radius = Math.Min(bounds.Width * 0.47, bounds.Height * 0.98);
         var sweep = Tokens.Material.NeedleSweepDegrees * Math.PI / 180;
+        var zeroAngle = -sweep / 2 + (sweep * Tokens.Material.MeterZeroPoint);
 
-        var scalePen = new Pen(new SolidColorBrush(Tokens.Colors.MeterNeedle), Tokens.Border.Hairline);
-        var overPen = new Pen(new SolidColorBrush(Tokens.Colors.MeterRed), Tokens.Border.Hairline);
+        // The arc, black to 0 VU and red beyond it — printed, not lit.
+        var arcPen = new Pen(new SolidColorBrush(Tokens.Colors.MeterNeedle), Tokens.Border.Hairline);
+        var overPen = new Pen(new SolidColorBrush(Tokens.Colors.MeterRed), Tokens.Border.Hairline * 2);
+        DrawArc(context, arcPen, pivot, radius * 0.86, -sweep / 2, zeroAngle);
+        DrawArc(context, overPen, pivot, radius * 0.86, zeroAngle, sweep / 2);
 
-        for (var tick = 0.0; tick <= 1.0001; tick += 0.1)
+        // Ticks, and the printed numbers.
+        var typeface = new Typeface(Tokens.Fonts.Grotesque, weight: FontWeight.Medium);
+        foreach (var (at, label) in Scale)
         {
-            var angle = -sweep / 2 + (sweep * tick);
-            var major = tick % 0.2 < 0.01;
-            var inner = radius * (major ? 0.78 : 0.86);
+            var angle = -sweep / 2 + (sweep * at);
+            var over = at >= Tokens.Material.MeterZeroPoint;
+            var pen = over ? new Pen(new SolidColorBrush(Tokens.Colors.MeterRed), Tokens.Border.Hairline) : arcPen;
+            context.DrawLine(pen, Polar(pivot, angle, radius * 0.86), Polar(pivot, angle, radius * 0.94));
 
-            context.DrawLine(
-                tick >= Tokens.Material.MeterZeroPoint ? overPen : scalePen,
-                Polar(pivot, angle, inner),
-                Polar(pivot, angle, radius));
+            if (!ShowScale) continue;
+
+            var text = new FormattedText(
+                label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface,
+                Tokens.Fonts.MeterScale, new SolidColorBrush(over ? Tokens.Colors.MeterRed : Tokens.Colors.MeterNeedle));
+            var at2 = Polar(pivot, angle, radius * 1.0);
+            context.DrawText(text, new Point(at2.X - text.Width / 2, at2.Y - text.Height / 2));
         }
 
-        var needleAngle = -sweep / 2 + (sweep * _needle);
-        var needlePen = new Pen(
-            new SolidColorBrush(Tokens.Colors.MeterNeedle), Tokens.Material.NeedleWidth);
-        context.DrawLine(needlePen, pivot, Polar(pivot, needleAngle, radius * 0.98));
+        // Minor ticks between the printed ones.
+        for (var tick = 0.05; tick < 1.0; tick += 0.1)
+        {
+            var angle = -sweep / 2 + (sweep * tick);
+            var over = tick >= Tokens.Material.MeterZeroPoint;
+            context.DrawLine(over ? overPen : arcPen, Polar(pivot, angle, radius * 0.86), Polar(pivot, angle, radius * 0.90));
+        }
 
-        var frame = new Pen(new SolidColorBrush(Tokens.Colors.Seam), Tokens.Border.Hairline);
-        context.DrawRectangle(null, frame, new RoundedRect(bounds, Tokens.Radius.Chip));
+        if (ShowScale)
+        {
+            var vu = new FormattedText(
+                "VU", CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                new Typeface(Tokens.Fonts.Grotesque, weight: FontWeight.Bold),
+                Tokens.Fonts.SilkscreenLarge, new SolidColorBrush(Tokens.Colors.MeterNeedle, Tokens.Opacity.Dim));
+            context.DrawText(vu, new Point(bounds.Width / 2 - vu.Width / 2, bounds.Height * 0.56));
+        }
+
+        // Needle, and the pivot cover it disappears into. Both clipped to the face: the
+        // pivot is below the bezel, and the movement must not draw on the panel.
+        using (context.PushClip(bounds))
+        {
+            var needleAngle = -sweep / 2 + (sweep * _needle);
+            var needlePen = new Pen(new SolidColorBrush(Tokens.Colors.MeterNeedle), Tokens.Material.NeedleWidth);
+            context.DrawLine(needlePen, pivot, Polar(pivot, needleAngle, radius * 0.97));
+
+            var coverRadius = bounds.Height * 0.16;
+            context.DrawEllipse(new SolidColorBrush(Tokens.Colors.MeterNeedle), null, pivot, coverRadius, coverRadius);
+        }
+
+        // Bezel: seam outside, a hairline of shade inside so the face reads as recessed.
+        context.DrawRectangle(null, new Pen(new SolidColorBrush(Tokens.Colors.Seam), Tokens.Border.Hairline), face);
+        context.DrawRectangle(null, new Pen(new SolidColorBrush(Avalonia.Media.Colors.Black, Tokens.Opacity.Faint), Tokens.Border.Hairline),
+            new RoundedRect(bounds.Deflate(Tokens.Border.Hairline), Tokens.Radius.Chip));
+    }
+
+    private static void DrawArc(DrawingContext context, IPen pen, Point pivot, double radius, double from, double to)
+    {
+        const int steps = 24;
+        var previous = Polar(pivot, from, radius);
+        for (var i = 1; i <= steps; i++)
+        {
+            var angle = from + ((to - from) * i / steps);
+            var next = Polar(pivot, angle, radius);
+            context.DrawLine(pen, previous, next);
+            previous = next;
+        }
     }
 
     private static Point Polar(Point origin, double angle, double distance) =>
         new(origin.X + (Math.Sin(angle) * distance), origin.Y - (Math.Cos(angle) * distance));
+}
+
+/// <summary>
+/// A seven-segment readout, the tape counter.
+/// </summary>
+/// <remarks>
+/// Digits are drawn, not typeset: seven bars per digit with a slight forward slant, unlit
+/// segments left faintly visible the way an LCD's are. Accepts digits, a colon, a space and
+/// a dash; anything else renders as blank.
+/// </remarks>
+public sealed class SegmentReadout : Control
+{
+    /// <summary>The text to show.</summary>
+    public static readonly StyledProperty<string> TextProperty =
+        AvaloniaProperty.Register<SegmentReadout, string>(nameof(Text), "00:00");
+
+    /// <inheritdoc cref="TextProperty"/>
+    public string Text
+    {
+        get => GetValue(TextProperty);
+        set => SetValue(TextProperty, value);
+    }
+
+    // Segment order: a top, b top-right, c bottom-right, d bottom, e bottom-left, f top-left, g middle.
+    private static readonly Dictionary<char, byte> Glyphs = new()
+    {
+        ['0'] = 0b0111111, ['1'] = 0b0000110, ['2'] = 0b1011011, ['3'] = 0b1001111,
+        ['4'] = 0b1100110, ['5'] = 0b1101101, ['6'] = 0b1111101, ['7'] = 0b0000111,
+        ['8'] = 0b1111111, ['9'] = 0b1101111, ['-'] = 0b1000000, [' '] = 0,
+    };
+
+    static SegmentReadout() => AffectsMeasure<SegmentReadout>(TextProperty);
+
+    /// <inheritdoc />
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        double width = 0;
+        foreach (var ch in Text)
+        {
+            width += ch == ':' ? Tokens.Material.SegmentColonAdvance : Tokens.Material.SegmentDigitAdvance;
+        }
+        return new Size(width + (Tokens.Material.SegmentDigitHeight * Tokens.Material.SegmentSlant), Tokens.Material.SegmentDigitHeight);
+    }
+
+    /// <inheritdoc />
+    public override void Render(DrawingContext context)
+    {
+        var lit = new SolidColorBrush(Tokens.Colors.InkOnDeck);
+        var ghost = new SolidColorBrush(Tokens.Colors.InkOnDeck, Tokens.Material.SegmentGhostOpacity);
+
+        var x = Tokens.Material.SegmentDigitHeight * Tokens.Material.SegmentSlant;
+        foreach (var ch in Text)
+        {
+            if (ch == ':')
+            {
+                DrawColon(context, lit, x);
+                x += Tokens.Material.SegmentColonAdvance;
+                continue;
+            }
+
+            var mask = Glyphs.GetValueOrDefault(ch, (byte)0);
+            DrawDigit(context, lit, ghost, x, mask);
+            x += Tokens.Material.SegmentDigitAdvance;
+        }
+    }
+
+    private static void DrawDigit(DrawingContext context, IBrush lit, IBrush ghost, double x, byte mask)
+    {
+        var h = Tokens.Material.SegmentDigitHeight;
+        var w = Tokens.Material.SegmentDigitWidth;
+        var t = Tokens.Material.SegmentThickness;
+        var g = Tokens.Material.SegmentGap;
+        var slant = Tokens.Material.SegmentSlant;
+
+        // Each segment as a rectangle in unslanted digit space, then sheared.
+        (Rect rect, int bit)[] segments =
+        [
+            (new Rect(t + g, 0, w - 2 * (t + g), t), 0),                     // a
+            (new Rect(w - t, t + g, t, h / 2 - t - 2 * g), 1),               // b
+            (new Rect(w - t, h / 2 + g, t, h / 2 - t - 2 * g), 2),           // c
+            (new Rect(t + g, h - t, w - 2 * (t + g), t), 3),                 // d
+            (new Rect(0, h / 2 + g, t, h / 2 - t - 2 * g), 4),               // e
+            (new Rect(0, t + g, t, h / 2 - t - 2 * g), 5),                   // f
+            (new Rect(t + g, h / 2 - t / 2, w - 2 * (t + g), t), 6),         // g
+        ];
+
+        foreach (var (rect, bit) in segments)
+        {
+            var on = (mask & (1 << bit)) != 0;
+            var shear = (h - rect.Y - rect.Height / 2) * slant;
+            context.DrawRectangle(on ? lit : ghost, null, new Rect(x + rect.X + shear, rect.Y, rect.Width, rect.Height));
+        }
+    }
+
+    private static void DrawColon(DrawingContext context, IBrush lit, double x)
+    {
+        var h = Tokens.Material.SegmentDigitHeight;
+        var t = Tokens.Material.SegmentThickness;
+        var slant = Tokens.Material.SegmentSlant;
+        var cx = x + (Tokens.Material.SegmentColonAdvance - t) / 2;
+
+        context.DrawRectangle(lit, null, new Rect(cx + (h - h * 0.3) * slant, h * 0.3 - t / 2, t, t));
+        context.DrawRectangle(lit, null, new Rect(cx + (h - h * 0.7) * slant, h * 0.7 - t / 2, t, t));
+    }
+}
+
+/// <summary>
+/// A scrolling trace of recent input level, drawn as bars mirrored about a centre line.
+/// </summary>
+/// <remarks>
+/// Reads as a waveform on an oscilloscope rather than a progress bar: it has no end, it
+/// scrolls, and it is drawn in readout ink on the deck window. Fed by <see cref="Push"/>.
+/// </remarks>
+public sealed class LevelTrace : Control
+{
+    private readonly double[] _history = new double[Tokens.Material.TraceLength];
+    private int _head;
+
+    /// <summary>Creates a trace at the token size.</summary>
+    public LevelTrace()
+    {
+        Width = Tokens.Material.TraceLength * (Tokens.Material.TraceBarWidth + Tokens.Material.TraceBarGap);
+        Height = Tokens.Material.TraceHeight;
+    }
+
+    /// <summary>Appends one reading, 0…1, and redraws.</summary>
+    public void Push(double level)
+    {
+        _history[_head] = Math.Clamp(level, 0, 1);
+        _head = (_head + 1) % _history.Length;
+        InvalidateVisual();
+    }
+
+    /// <summary>Clears the trace.</summary>
+    public void Clear()
+    {
+        Array.Clear(_history);
+        InvalidateVisual();
+    }
+
+    /// <inheritdoc />
+    public override void Render(DrawingContext context)
+    {
+        var bounds = new Rect(Bounds.Size);
+        var mid = bounds.Height / 2;
+        var pitch = Tokens.Material.TraceBarWidth + Tokens.Material.TraceBarGap;
+
+        var baseline = new Pen(new SolidColorBrush(Tokens.Colors.InkOnDeck, Tokens.Material.SegmentGhostOpacity), Tokens.Border.Hairline);
+        context.DrawLine(baseline, new Point(0, mid), new Point(bounds.Width, mid));
+
+        var ink = new SolidColorBrush(Tokens.Colors.InkOnDeck, 0.85);
+        for (var i = 0; i < _history.Length; i++)
+        {
+            var value = _history[(_head + i) % _history.Length];
+            if (value <= 0) continue;
+
+            // Square-root so quiet speech is visible; a linear trace is a flat line with
+            // occasional spikes.
+            var half = Math.Max(Tokens.Border.Hairline, Math.Sqrt(value) * mid);
+            context.DrawRectangle(ink, null, new Rect(i * pitch, mid - half, Tokens.Material.TraceBarWidth, half * 2));
+        }
+    }
 }
 
 /// <summary>A run of ventilation slots.</summary>
@@ -419,7 +791,7 @@ public sealed class Vents : Control
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
-        var brush = new SolidColorBrush(Tokens.Colors.Seam, 0.5);
+        var brush = new SolidColorBrush(Tokens.Colors.Seam, Tokens.Opacity.Seam);
         var pitch = Tokens.Material.VentSlotWidth + Tokens.Material.VentSlotGap;
 
         for (var i = 0; i < Count; i++)
@@ -427,7 +799,7 @@ public sealed class Vents : Control
             var slot = new Rect(
                 i * pitch, 0,
                 Tokens.Material.VentSlotWidth, Tokens.Material.VentSlotHeight);
-            context.DrawRectangle(brush, null, new RoundedRect(slot, 1.5));
+            context.DrawRectangle(brush, null, new RoundedRect(slot, Tokens.Material.VentRadius));
         }
     }
 }

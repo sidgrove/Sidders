@@ -33,7 +33,7 @@ public sealed class TranscriptionsView : UserControl
         _search.TextChanged += (_, _) => Refresh();
 
         _list = new StackPanel { Spacing = Tokens.Space.Snug, Margin = new Thickness(Tokens.Space.Base) };
-        _count = new Silkscreen { Foreground = new SolidColorBrush(Tokens.Colors.InkOnDeck, 0.5) };
+        _count = new Silkscreen { Foreground = Tokens.Brushes.InkOnDeckDim };
 
         var clear = Panels.DeckButton("DELETE ALL");
         clear.Click += (_, _) => { _store.Clear(); Refresh(); };
@@ -50,6 +50,13 @@ public sealed class TranscriptionsView : UserControl
 
         _store.Changed += (_, _) => Refresh();
         Refresh();
+    }
+
+    /// <summary>Puts the caret in the search field.</summary>
+    public void FocusSearch()
+    {
+        _search.Focus();
+        _search.SelectAll();
     }
 
     private void Refresh()
@@ -79,7 +86,7 @@ public sealed class TranscriptionsView : UserControl
             if (clipboard is not null) await clipboard.SetTextAsync(record.Text).ConfigureAwait(true);
 
             copy.Content = "COPIED";
-            await Task.Delay(TimeSpan.FromSeconds(1.4)).ConfigureAwait(true);
+            await Task.Delay(Tokens.Motion.Confirmation).ConfigureAwait(true);
             copy.Content = "COPY";
         };
 
@@ -95,7 +102,7 @@ public sealed class TranscriptionsView : UserControl
                 new Silkscreen
                 {
                     Text = record.At.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture),
-                    Foreground = new SolidColorBrush(Tokens.Colors.InkOnDeck, 0.55),
+                    Foreground = Tokens.Brushes.InkOnDeckDim,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
                 new TextBlock
@@ -103,7 +110,7 @@ public sealed class TranscriptionsView : UserControl
                     Text = record.ProcessingSeconds.ToString("0.00", CultureInfo.CurrentCulture) + "s",
                     FontFamily = Tokens.Fonts.Mono,
                     FontSize = Tokens.Fonts.Caption,
-                    Foreground = new SolidColorBrush(Tokens.Colors.InkOnDeck, 0.45),
+                    Foreground = Tokens.Brushes.InkOnDeckFaint,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
             },
@@ -162,7 +169,7 @@ public sealed class TranscriptionsView : UserControl
 
             row.Children.Add(new Border
             {
-                BorderBrush = new SolidColorBrush(Tokens.Colors.MeterAmber, 0.35),
+                BorderBrush = new SolidColorBrush(Tokens.Colors.MeterAmber, Tokens.Opacity.Faint),
                 BorderThickness = new Thickness(Tokens.Border.Hairline),
                 CornerRadius = new CornerRadius(Tokens.Radius.Chip),
                 Padding = new Thickness(Tokens.Space.Snug, Tokens.Space.Hair),

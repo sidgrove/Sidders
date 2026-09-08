@@ -44,6 +44,9 @@ public sealed class FakeAudioCapture : IAudioCapture
     /// <inheritdoc />
     public bool IsCapturing { get; private set; }
 
+    /// <summary>Set to simulate the OS feeding silence because the microphone is blocked.</summary>
+    public bool LooksLikeBlockedMicrophone { get; set; }
+
     /// <inheritdoc />
     public async IAsyncEnumerable<AudioChunk> CaptureAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -162,6 +165,16 @@ public sealed class RecordingTextInjector : ITextInjector
         Injected.Add(text);
         return ValueTask.FromResult(true);
     }
+}
+
+/// <summary>A startup registration that only remembers.</summary>
+public sealed class FakeStartupRegistration : IStartupRegistration
+{
+    /// <inheritdoc />
+    public bool IsEnabled { get; private set; }
+
+    /// <inheritdoc />
+    public bool SetEnabled(bool enabled) { IsEnabled = enabled; return true; }
 }
 
 /// <summary>A clock you advance by hand.</summary>

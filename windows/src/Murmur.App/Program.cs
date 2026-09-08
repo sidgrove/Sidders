@@ -6,7 +6,10 @@ namespace Murmur.App;
 public static class Program
 {
     /// <summary>Starts the app, or runs a headless self-test.</summary>
-    /// <param name="args">Command line. <c>--selftest</c> exits without showing UI.</param>
+    /// <param name="args">
+    /// Command line. <c>--selftest</c> exits without showing UI; <c>--minimized</c> starts
+    /// in the tray, which is what the sign-in registration passes.
+    /// </param>
     /// <returns>0 on success.</returns>
     [STAThread]
     public static int Main(string[] args)
@@ -22,6 +25,8 @@ public static class Program
         {
             return SelfTest.Run();
         }
+
+        App.StartMinimized = args.Contains(App.MinimizedArgument, StringComparer.OrdinalIgnoreCase);
 
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

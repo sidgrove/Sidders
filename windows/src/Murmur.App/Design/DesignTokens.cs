@@ -20,12 +20,13 @@ namespace Murmur.App.Design;
 /// <para>Two rules that are not negotiable:</para>
 /// <list type="bullet">
 /// <item><b>Red means recording.</b> Nothing else in the app is red.</item>
-/// <item><b>Amber and green are instrumentation only</b> — level meters, never UI chrome.</item>
+/// <item><b>Amber and green are instrumentation only</b> — level meters and indicator lamps,
+/// never UI chrome.</item>
 /// </list>
 /// <para>
 /// Explicitly ruled out: neon, vaporwave, synthwave, purple/pink gradients, glowing text,
 /// chrome lettering, grid horizons. There are <b>no gradients anywhere</b>; depth comes from
-/// flat panels, hairline bevels and procedurally-drawn brushed grain.
+/// flat panels, hairline bevels, hard short shadows and procedurally-drawn brushed grain.
 /// </para>
 /// </remarks>
 public static class Tokens
@@ -78,6 +79,9 @@ public static class Tokens
         /// <summary>Silkscreened labels printed onto the panel.</summary>
         public static Color Silkscreen => Face(0x3A3630, 0xB0AA9E);
 
+        /// <summary>Silkscreen printed onto the dark chassis, regardless of face.</summary>
+        public static Color SilkscreenOnChassis => Rgb(0x9C968A);
+
         /// <summary>Text on a dark readout well, regardless of face.</summary>
         public static Color InkOnDeck => Rgb(0xD8D2C4);
 
@@ -98,6 +102,9 @@ public static class Tokens
 
         /// <summary>Row under the pointer, before selection.</summary>
         public static Color Hover => Face(0xC2BDB6, 0x343130);
+
+        /// <summary>A row on the dark deck under the pointer.</summary>
+        public static Color DeckHover => Rgb(0x201E1B);
 
         // Instrumentation only. Never use these for UI chrome.
 
@@ -146,17 +153,57 @@ public static class Tokens
         /// <inheritdoc cref="Colors.Ink"/>
         public static IBrush Ink => new SolidColorBrush(Colors.Ink);
 
+        /// <inheritdoc cref="Colors.InkSecondary"/>
+        public static IBrush InkSecondary => new SolidColorBrush(Colors.InkSecondary);
+
         /// <inheritdoc cref="Colors.Silkscreen"/>
         public static IBrush Silkscreen => new SolidColorBrush(Colors.Silkscreen);
 
+        /// <inheritdoc cref="Colors.SilkscreenOnChassis"/>
+        public static IBrush SilkscreenOnChassis => new SolidColorBrush(Colors.SilkscreenOnChassis);
+
         /// <inheritdoc cref="Colors.InkOnDeck"/>
         public static IBrush InkOnDeck => new SolidColorBrush(Colors.InkOnDeck);
+
+        /// <summary>Ink on the deck at a reduced opacity, for secondary readout text.</summary>
+        public static IBrush InkOnDeckDim => new SolidColorBrush(Colors.InkOnDeck, Opacity.Dim);
+
+        /// <summary>Ink on the deck at the faintest legible opacity.</summary>
+        public static IBrush InkOnDeckFaint => new SolidColorBrush(Colors.InkOnDeck, Opacity.Faint);
 
         /// <inheritdoc cref="Colors.Record"/>
         public static IBrush Record => new SolidColorBrush(Colors.Record);
 
         /// <inheritdoc cref="Colors.MeterFace"/>
         public static IBrush MeterFace => new SolidColorBrush(Colors.MeterFace);
+
+        /// <inheritdoc cref="Colors.MeterAmber"/>
+        public static IBrush MeterAmber => new SolidColorBrush(Colors.MeterAmber);
+
+        /// <inheritdoc cref="Colors.Seam"/>
+        public static IBrush Seam => new SolidColorBrush(Colors.Seam);
+    }
+
+    /// <summary>
+    /// The few opacities used for secondary ink, seams and grain. Named so no view carries
+    /// a bare <c>0.55</c>.
+    /// </summary>
+    public static class Opacity
+    {
+        /// <summary>Secondary text on a readout.</summary>
+        public const double Dim = 0.55;
+
+        /// <summary>Tertiary text, placeholder copy.</summary>
+        public const double Faint = 0.38;
+
+        /// <summary>A seam drawn on a lighter surface, so it reads as a line not a gap.</summary>
+        public const double Seam = 0.5;
+
+        /// <summary>Disabled rows.</summary>
+        public const double Disabled = 0.45;
+
+        /// <summary>The amber wash behind a lit VU face.</summary>
+        public const double MeterWash = 0.14;
     }
 
     // ---- Type ----
@@ -165,24 +212,30 @@ public static class Tokens
     /// A neutral grotesque, the way equipment was labelled.
     /// </summary>
     /// <remarks>
-    /// Helvetica on macOS, Arial on Windows — the closest widely-installed grotesques. A
-    /// humanist UI font has rounded terminals that fight the silkscreen look.
+    /// Bahnschrift ships with Windows 10 and 11 and is a DIN — the German industrial standard
+    /// face, which is literally what Braun and the German decks were labelled in. Helvetica is
+    /// the macOS equivalent and is not installed on Windows; Arial closes the gap where
+    /// Bahnschrift is missing. A humanist UI face has rounded terminals that fight the
+    /// silkscreen look, so Segoe is deliberately last.
     /// </remarks>
     public static class Fonts
     {
         /// <summary>The panel typeface.</summary>
         public static FontFamily Grotesque { get; } =
-            new("Helvetica Neue, Helvetica, Arial, sans-serif");
+            new("Bahnschrift, Helvetica Neue, Helvetica, Arial, Segoe UI, sans-serif");
 
         /// <summary>Readouts and timings. Monospaced so digits don't shift as they tick.</summary>
         public static FontFamily Mono { get; } =
-            new("Consolas, Menlo, SF Mono, monospace");
+            new("Cascadia Mono, Consolas, Menlo, SF Mono, monospace");
 
         /// <summary>Panel labels: small, uppercase, tightly tracked.</summary>
         public const double Silkscreen = 9;
 
         /// <summary>A larger silkscreen label, for section headers.</summary>
         public const double SilkscreenLarge = 11;
+
+        /// <summary>The unit name on the caption strip.</summary>
+        public const double Nameplate = 13;
 
         /// <summary>Caption text.</summary>
         public const double Caption = 10;
@@ -201,6 +254,12 @@ public static class Tokens
 
         /// <summary>Letter spacing for silkscreen labels, in device-independent pixels.</summary>
         public const double SilkscreenTracking = 1.1;
+
+        /// <summary>Wider tracking for the nameplate, the way a model name is set.</summary>
+        public const double NameplateTracking = 2.4;
+
+        /// <summary>Printing on the VU scale — the smallest type in the app.</summary>
+        public const double MeterScale = 7;
     }
 
     // ---- Geometry ----
@@ -264,6 +323,35 @@ public static class Tokens
         public const double Bevel = 1;
     }
 
+    /// <summary>
+    /// Depth is physical: a raised cap casts a short hard shadow, a well is cut into the
+    /// panel. No soft ambient glows.
+    /// </summary>
+    public static class Shadow
+    {
+        /// <summary>A button cap sitting proud of the panel.</summary>
+        public static BoxShadows Raised => Spec(0.35, blur: 2, offsetY: 1);
+
+        /// <summary>A cap while pressed — nearly flush.</summary>
+        public static BoxShadows Pressed => Spec(0.22, blur: 1, offsetY: 0);
+
+        /// <summary>A grouped panel above the chassis.</summary>
+        public static BoxShadows Panel => Spec(0.25, blur: 6, offsetY: 2);
+
+        /// <summary>A popup menu above the panel.</summary>
+        public static BoxShadows Popup => Spec(0.45, blur: 10, offsetY: 4);
+
+        /// <summary>The overlay readout against the desktop.</summary>
+        public static BoxShadows Overlay => Spec(0.40, blur: 16, offsetY: 6);
+
+        private static BoxShadows Spec(double opacity, double blur, double offsetY) => new(new BoxShadow
+        {
+            Color = Color.FromArgb((byte)(opacity * 255), 0, 0, 0),
+            Blur = blur,
+            OffsetY = offsetY,
+        });
+    }
+
     // ---- Material ----
 
     /// <summary>
@@ -284,6 +372,9 @@ public static class Tokens
         /// <summary>Diameter of a panel screw head.</summary>
         public const double ScrewSize = 9;
 
+        /// <summary>Inset of a screw from the panel corner.</summary>
+        public const double ScrewInset = 10;
+
         /// <summary>A single vent slot.</summary>
         public const double VentSlotWidth = 3;
 
@@ -293,8 +384,14 @@ public static class Tokens
         /// <summary>Gap between vent slots.</summary>
         public const double VentSlotGap = 4;
 
+        /// <summary>Corner radius of a vent slot.</summary>
+        public const double VentRadius = 1.5;
+
         /// <summary>Indicator lamp diameter.</summary>
         public const double LampSize = 7;
+
+        /// <summary>A smaller lamp, for list rows and status clusters.</summary>
+        public const double LampSizeSmall = 6;
 
         /// <summary>A lit lamp's lens highlight — a specular dot, not a bloom.</summary>
         public const double LampSpecular = 0.45;
@@ -308,8 +405,14 @@ public static class Tokens
         /// <summary>Minimum transport key width.</summary>
         public const double KeyMinWidth = 52;
 
+        /// <summary>The record key is wider than the others, as on every deck.</summary>
+        public const double RecordKeyMinWidth = 96;
+
         /// <summary>How far a key sinks when pressed.</summary>
         public const double KeyTravel = 1.5;
+
+        /// <summary>Window caption keys — square, small, on the chassis.</summary>
+        public const double CaptionKeySize = 22;
 
         /// <summary>Total sweep of the VU needle, in degrees, centred on vertical.</summary>
         public const double NeedleSweepDegrees = 96;
@@ -319,6 +422,102 @@ public static class Tokens
 
         /// <summary>Where 0 VU sits along the scale, 0…1. The red zone begins here.</summary>
         public const double MeterZeroPoint = 0.72;
+
+        /// <summary>The VU face on the front panel.</summary>
+        public const double MeterWidth = 236;
+
+        /// <summary>Height of the VU face on the front panel.</summary>
+        public const double MeterHeight = 92;
+
+        /// <summary>The VU face on the overlay readout.</summary>
+        public const double MeterWidthSmall = 120;
+
+        /// <summary>Height of the overlay VU face.</summary>
+        public const double MeterHeightSmall = 44;
+
+        /// <summary>Stroke width of a seven-segment bar.</summary>
+        public const double SegmentThickness = 3;
+
+        /// <summary>Gap between segments within a digit.</summary>
+        public const double SegmentGap = 1;
+
+        /// <summary>Unlit segments stay faintly visible, as on a real LCD.</summary>
+        public const double SegmentGhostOpacity = 0.12;
+
+        /// <summary>Height of one seven-segment digit.</summary>
+        public const double SegmentDigitHeight = 30;
+
+        /// <summary>Width of one seven-segment digit.</summary>
+        public const double SegmentDigitWidth = 17;
+
+        /// <summary>Horizontal advance between digits.</summary>
+        public const double SegmentDigitAdvance = 22;
+
+        /// <summary>Width reserved for a colon.</summary>
+        public const double SegmentColonAdvance = 9;
+
+        /// <summary>Slant of the digits, as horizontal offset per unit height.</summary>
+        public const double SegmentSlant = 0.08;
+
+        /// <summary>Width of one bar in the level trace.</summary>
+        public const double TraceBarWidth = 2;
+
+        /// <summary>Gap between trace bars.</summary>
+        public const double TraceBarGap = 1;
+
+        /// <summary>How many readings the trace remembers.</summary>
+        public const int TraceLength = 96;
+
+        /// <summary>Height of the level trace readout.</summary>
+        public const double TraceHeight = 22;
+
+        /// <summary>Height of the caption strip that replaces the OS title bar.</summary>
+        public const double CaptionHeight = 34;
+
+        /// <summary>Height of the menu row.</summary>
+        public const double MenuHeight = 26;
+
+        /// <summary>The overlay readout shown over other apps.</summary>
+        public const double OverlayWidth = 236;
+
+        /// <summary>Height of the overlay readout.</summary>
+        public const double OverlayHeight = 72;
+
+        /// <summary>Distance of the overlay from the bottom of the screen.</summary>
+        public const double OverlayBottomMargin = 64;
+    }
+
+    // ---- Layout ----
+
+    /// <summary>Window and dialog dimensions, so no view carries a bare <c>880</c>.</summary>
+    public static class Layout
+    {
+        /// <summary>Initial main window width.</summary>
+        public const double MainWidth = 960;
+
+        /// <summary>Initial main window height.</summary>
+        public const double MainHeight = 700;
+
+        /// <summary>Smallest main window that still lays out the front panel on one row.</summary>
+        public const double MainMinWidth = 820;
+
+        /// <summary>Smallest main window height.</summary>
+        public const double MainMinHeight = 560;
+
+        /// <summary>Settings dialog width.</summary>
+        public const double SettingsWidth = 600;
+
+        /// <summary>Dictionary entry editor width.</summary>
+        public const double EditorWidth = 480;
+
+        /// <summary>Widest a paragraph of helper text is allowed to run.</summary>
+        public const double NoteMaxWidth = 420;
+
+        /// <summary>Width of the kind tag on a dictionary row.</summary>
+        public const double KindTagWidth = 34;
+
+        /// <summary>Height of the model download gauge.</summary>
+        public const double GaugeHeight = 10;
     }
 
     // ---- Motion ----
@@ -337,6 +536,15 @@ public static class Tokens
 
         /// <summary>The record lamp coming on — instant, like a filament.</summary>
         public static TimeSpan Lamp { get; } = TimeSpan.FromMilliseconds(80);
+
+        /// <summary>How often the panel polls the engine for level and state.</summary>
+        public static TimeSpan PanelPoll { get; } = TimeSpan.FromMilliseconds(50);
+
+        /// <summary>One frame of needle physics.</summary>
+        public static TimeSpan Frame { get; } = TimeSpan.FromMilliseconds(16);
+
+        /// <summary>How long "COPIED" stays on a key before it reads "COPY" again.</summary>
+        public static TimeSpan Confirmation { get; } = TimeSpan.FromMilliseconds(1400);
 
         /// <summary>
         /// VU ballistics: seconds to reach a step going up.

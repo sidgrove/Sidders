@@ -20,11 +20,16 @@ whatever had focus. Two independent implementations:
 
 **The macOS app works and is in daily use.**
 
-**The Windows app is complete but has never run on real hardware.** Every layer exists;
-CI builds it, runs 63 tests, publishes a single-file executable, launches it on Windows and
-confirms the platform layer loads and constructs. What has never happened is a person
-holding the key and speaking into a microphone. Describe it that way — not as "working",
-not as "unfinished".
+**The Windows app runs on real hardware** (Windows 11, since 2026-09-08): hook armed,
+model loaded, front panel, tray, Settings, in-app model download, microphone selection,
+per-user installer. CI builds it, runs 80 tests and self-tests the published exe. The first
+hardware session found three bugs CI could not see — read `windows/README.md` §"What real
+hardware found" before assuming a green build means anything about audio. What no agent
+has done is speak into it and read the result; say so rather than claiming otherwise.
+
+**Windows failures are readable.** `%LOCALAPPDATA%\Murmur\murmur.log` (Help → Open log)
+records hook, model and capture outcomes; the engine's `Faulted` event puts the same
+sentence on the front panel. Start there, not with the debugger.
 
 ---
 
@@ -188,19 +193,18 @@ lookahead, `\p{L}`, and `$1`–`$9` in replacements. Nothing else.
 2. **Onboarding** — a first-run window walking through the macOS permissions.
 3. **Notarization** (macOS) and **code signing** (Windows). Both apps are unsigned for
    distribution, so Windows users will meet SmartScreen.
-4. **An installer** for Windows, and model download from inside the app rather than by
-   following `docs/PARAKEET-WINDOWS.md` by hand.
+4. **Engine biasing on Windows.** sherpa-onnx's offline recogniser exposes no contextual
+   phrase list for this model, so the dictionary's correction pass does the whole job there.
+5. **A hotkey change without a restart** on Windows — the hook is built once at startup.
 
 ## What no amount of CI can verify
 
-On Windows, nobody has yet held the key and spoken. Specifically unverified:
+On Windows the app has been launched, armed and model-loaded on a real machine, but no
+agent can hear itself speak. Still unverified by a person:
 
-- Text injection landing in a foreground app — runners have an interactive desktop but
-  cannot take the foreground.
-- A real microphone: format negotiation, the OS privacy block, unplugging mid-capture.
-- The keyboard hook firing on a physical keypress.
-- Parakeet transcribing real speech, and whether ~2 GB resident is tolerable.
+- A spoken dictation landing in a foreground app, and how good the transcript is.
+- The OS microphone-privacy block message appearing live.
+- Unplugging a microphone mid-capture.
 
-Everything those feed into is behind an interface and tested with fakes. The bindings
-themselves are not. **First real-hardware run should start with `--selftest`, then a single
-short dictation into Notepad.**
+**A real-hardware check should start with `Murmur.exe --selftest`, then `murmur.log`, then
+a single short dictation into Notepad.**

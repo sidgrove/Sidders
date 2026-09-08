@@ -22,3 +22,6 @@ artifacts/
 models/
 *.onnx
 *.nemo
+
+# Windows distributable, produced by windows/publish.ps1
+windows/dist/

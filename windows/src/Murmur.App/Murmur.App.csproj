@@ -9,6 +9,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>Assets/app.ico</ApplicationIcon>
+    <AssemblyName>Murmur</AssemblyName>
+    <AssemblyTitle>Murmur</AssemblyTitle>
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -48,9 +52,14 @@
   <Target Name="PublishWindowsPlatformLayer"
           BeforeTargets="ComputeResolvedFilesToPublishList"
           Condition="'$([System.OperatingSystem]::IsWindows())' == 'true'">
+    <!-- RemoveProperties matters: `dotnet publish -r win-x64` sets RuntimeIdentifier and
+         friends as GLOBAL properties, which flow into this inner build and move its output
+         to bin\Release\net10.0-windows\win-x64\ — where the globs below never look. Found
+         the first time publish was run on a real machine rather than in CI's exact shape. -->
     <MSBuild Projects="..\Murmur.Platform.Windows\Murmur.Platform.Windows.csproj"
              Targets="Build"
-             Properties="Configuration=$(Configuration)" />
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;IncludeNativeLibrariesForSelfExtract;PublishDir;DebugType;_IsPublishing" />
     <ItemGroup>
       <_PlatformPublish Include="..\Murmur.Platform.Windows\bin\$(Configuration)\net10.0-windows\Murmur.Platform.Windows.dll" />
       <_PlatformPublish Include="..\Murmur.Platform.Windows\bin\$(Configuration)\net10.0-windows\NAudio*.dll" />

@@ -42,8 +42,31 @@ public interface IAudioCapture : IAsyncDisposable
     /// <summary>Whether capture is currently running.</summary>
     bool IsCapturing { get; }
 
+    /// <summary>
+    /// True when the device appears to be delivering digital silence.
+    /// </summary>
+    /// <remarks>
+    /// On Windows, when "Let desktop apps access your microphone" is off, capture does not
+    /// fail — it yields exact zeros. That has to reach the user as a sentence about the
+    /// privacy setting rather than as an empty transcript, so implementations report it here.
+    /// </remarks>
+    bool LooksLikeBlockedMicrophone { get; }
+
     /// <summary>Starts capture and yields chunks until cancelled.</summary>
     IAsyncEnumerable<AudioChunk> CaptureAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>One microphone the OS knows about.</summary>
+/// <param name="Id">Stable device identifier, stored in settings.</param>
+/// <param name="Name">What to show the user.</param>
+/// <param name="IsDefault">Whether this is the device Windows would pick on its own.</param>
+public sealed record AudioDevice(string Id, string Name, bool IsDefault);
+
+/// <summary>Lists microphones, so the user can pick one rather than trust the OS default.</summary>
+public interface IAudioDeviceCatalog
+{
+    /// <summary>Every active capture device, default first.</summary>
+    IReadOnlyList<AudioDevice> ListCaptureDevices();
 }
 
 /// <summary>Raised when the push-to-talk key goes down or comes up.</summary>
@@ -93,6 +116,41 @@ public interface ITranscriber : IAsyncDisposable
         ReadOnlyMemory<float> samples,
         IReadOnlyList<string> biasPhrases,
         CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Registers the app to start when the user signs in.
+/// </summary>
+/// <remarks>
+/// A tray-resident dictation app that has to be launched by hand every morning is not
+/// really resident. Implemented per platform; where no implementation is found the toggle
+/// is simply not offered.
+/// </remarks>
+public interface IStartupRegistration
+{
+    /// <summary>Whether the app is currently registered to start at sign-in.</summary>
+    bool IsEnabled { get; }
+
+    /// <summary>Registers or unregisters the running executable.</summary>
+    /// <returns>False if the registration could not be changed.</returns>
+    bool SetEnabled(bool enabled);
+}
+
+/// <summary>
+/// Small adjustments to a native window that the UI framework does not expose.
+/// </summary>
+public interface IWindowTweaks
+{
+    /// <summary>
+    /// Stops a window from ever taking keyboard focus, even when clicked.
+    /// </summary>
+    /// <remarks>
+    /// The overlay readout shows while the user is dictating into <i>another</i> app. If it
+    /// could be activated, a stray click would move focus and the text would have nowhere to
+    /// go — the same load-bearing rule as the macOS HUD panel.
+    /// </remarks>
+    /// <param name="handle">The platform window handle.</param>
+    void MakeNonActivating(nint handle);
 }
 
 /// <summary>

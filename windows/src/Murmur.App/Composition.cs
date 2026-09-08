@@ -28,14 +28,23 @@ public sealed class Composition : IAsyncDisposable
         DictionaryFile dictionary,
         TranscriptStore transcripts,
         DictationEngine? engine,
+        ReloadableTranscriber? transcriber,
+        IStartupRegistration? startup,
+        IAudioDeviceCatalog? devices,
         bool platformAvailable)
     {
         Settings = settings;
         Dictionary = dictionary;
         Transcripts = transcripts;
         Engine = engine;
+        Transcriber = transcriber;
+        Startup = startup;
+        Devices = devices;
         IsPlatformAvailable = platformAvailable;
     }
+
+    /// <summary>Microphone enumeration, or null where the platform offers none.</summary>
+    public IAudioDeviceCatalog? Devices { get; }
 
     /// <summary>User preferences.</summary>
     public AppSettings Settings { get; }
@@ -49,6 +58,12 @@ public sealed class Composition : IAsyncDisposable
     /// <summary>The dictation engine, or null when no platform layer is available.</summary>
     public DictationEngine? Engine { get; }
 
+    /// <summary>The speech engine wrapper, so Settings can ask whether a model is loaded.</summary>
+    public ReloadableTranscriber? Transcriber { get; }
+
+    /// <summary>Start-at-sign-in, or null where the platform offers none.</summary>
+    public IStartupRegistration? Startup { get; }
+
     /// <summary>Whether real audio and hotkey support were found.</summary>
     public bool IsPlatformAvailable { get; }
 
@@ -58,28 +73,42 @@ public sealed class Composition : IAsyncDisposable
     /// <summary>Builds the object graph.</summary>
     public static Composition Create()
     {
+        Log.Info($"Murmur starting: {Environment.ProcessPath} on {Environment.OSVersion}");
+
         var settings = new AppSettings(AppSettings.DefaultPath);
         var dictionary = new DictionaryFile(DictionaryFile.DefaultPath);
         var transcripts = new TranscriptStore(TranscriptStore.DefaultPath);
 
-        var capture = PlatformFactory.CreateAudioCapture();
+        var capture = PlatformFactory.CreateAudioCapture(() => settings.Data.MicrophoneDeviceId);
         var hotkey = PlatformFactory.CreateHotkeySource(settings.Data.PushToTalkKey);
         var injector = PlatformFactory.CreateTextInjector();
+        var startup = PlatformFactory.CreateStartupRegistration();
+        var devices = PlatformFactory.CreateAudioDeviceCatalog();
 
         DictationEngine? engine = null;
+        ReloadableTranscriber? transcriber = null;
         var available = capture is not null && hotkey is not null && injector is not null;
+
+        Log.Info(available ? "platform layer loaded" : "platform layer NOT available — running inert");
 
         if (available)
         {
-            var modelDirectory = settings.Data.ModelDirectory ?? ParakeetTranscriber.Locate();
-
-            ITranscriber transcriber = modelDirectory is not null
-                ? new ParakeetTranscriber(modelDirectory)
-                : new UnavailableTranscriber();
+            // Resolved lazily so a model downloaded from Settings is picked up without a
+            // restart. An explicit ModelDirectory in settings wins over the search paths.
+            transcriber = new ReloadableTranscriber(
+                () => settings.Data.ModelDirectory is { } chosen && ParakeetTranscriber.IsComplete(chosen)
+                    ? chosen
+                    : ParakeetTranscriber.Locate(),
+                directory => new ParakeetTranscriber(directory));
 
             engine = new DictationEngine(
                 capture!, hotkey!, transcriber, injector!,
-                () => dictionary.Entries);
+                () => dictionary.Entries)
+            {
+                InjectText = settings.Data.InjectText,
+            };
+
+            settings.Changed += (_, _) => engine.InjectText = settings.Data.InjectText;
 
             engine.Completed += (_, result) =>
             {
@@ -96,33 +125,13 @@ public sealed class Composition : IAsyncDisposable
             };
         }
 
-        return new Composition(settings, dictionary, transcripts, engine, available);
+        return new Composition(settings, dictionary, transcripts, engine, transcriber, startup, devices, available);
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         if (Engine is not null) await Engine.DisposeAsync().ConfigureAwait(false);
+        Log.Info("Murmur stopped");
     }
-}
-
-/// <summary>
-/// A transcriber that reports the model is missing rather than throwing.
-/// </summary>
-/// <remarks>
-/// A fresh Windows install has no model, and that has to be a readable message in Settings
-/// rather than a crash on first press.
-/// </remarks>
-internal sealed class UnavailableTranscriber : ITranscriber
-{
-    public bool IsReady => false;
-
-    public ValueTask<bool> LoadAsync(CancellationToken cancellationToken) => ValueTask.FromResult(false);
-
-    public ValueTask<string> TranscribeAsync(
-        ReadOnlyMemory<float> samples,
-        IReadOnlyList<string> biasPhrases,
-        CancellationToken cancellationToken) => ValueTask.FromResult(string.Empty);
-
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

@@ -5,6 +5,13 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>Murmur.Platform.Windows</RootNamespace>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+
+    <!-- Found on the first real-hardware run: a class library does NOT copy its package
+         assemblies to bin/, so NAudio.Core/Wasapi/WinMM were never beside this DLL, and
+         both Murmur.App's copy step and its publish step glob NAudio*.dll from exactly that
+         folder. The app started, the hook armed, and the first key press threw
+         FileNotFoundException inside an unobserved task. This makes the folder complete. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>

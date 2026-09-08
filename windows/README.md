@@ -2,10 +2,52 @@
 
 The Windows port of Murmur — push-to-talk dictation, on-device.
 
-> **Status: feature-complete, never run on real hardware.** Every layer exists and CI
-> builds, tests and publishes a working single-file executable that starts and passes its
-> own self-test on Windows. What has *not* happened is a human holding the key and speaking
-> into a real microphone — see [Honesty](#honesty).
+> **Status: running on real hardware since 2026-09-08.** Built, installed and driven on a
+> Windows 11 machine: the hook arms, the model loads in ~1.3 s, the front panel, tray,
+> Settings and model download all work. The first hardware session found three bugs CI
+> could never see — see [What real hardware found](#hardware). See [Honesty](#honesty) for
+> what is still unverified.
+
+---
+
+## Running it
+
+```powershell
+cd windows
+.\publish.ps1      # self-contained win-x64 build into windows\dist, runs the self-test
+.\install.ps1      # copies to %LOCALAPPDATA%\Programs\Murmur, Start menu, Apps entry, launches
+```
+
+No administrator rights at any point. `install.ps1 -Uninstall` removes it again and keeps the
+model and history.
+
+First run: open **Settings** (Ctrl+,), press **DOWNLOAD** under Model. It fetches the
+~660 MB Parakeet model from Hugging Face once and loads it without a restart. Then hold
+**Right Ctrl**, talk, release. Pick a microphone in the same window if the Windows default
+is not the one you dictate into.
+
+Everything the app writes lives in `%LOCALAPPDATA%\Murmur`: `settings.json`,
+`dictionary.txt` (edit it by hand if you like), `transcripts.jsonl`, `murmur.log`, and
+`models\`.
+
+---
+
+## <a id="hardware"></a>What real hardware found
+
+Three bugs, none of which 63 green tests and a passing self-test could have caught:
+
+1. **NAudio never shipped.** A class library does not copy its package assemblies to `bin`,
+   and both the copy step and the publish step globbed `NAudio*.dll` from exactly that empty
+   folder. Fixed with `CopyLocalLockFileAssemblies` in `Murmur.Platform.Windows.csproj`.
+2. **Then NAudio could not be loaded even when present.** A host with a `deps.json` probes
+   only the assemblies listed in it, and NAudio is deliberately unknown to `Murmur.App`. The
+   resolver in `PlatformFactory` now loads any assembly that sits beside the executable.
+3. **Nothing ever loaded the model.** No caller of `ITranscriber.LoadAsync` existed, so with
+   the files on disk every transcript was empty. The engine now loads on first use and
+   preloads at startup.
+
+And one design gap: every one of those failed *silently*, inside `_ = BeginAsync()`. The
+engine now logs to `murmur.log`, raises `Faulted`, and the front panel shows the message.
 
 ---
 
@@ -148,14 +190,17 @@ The two that affect this code are both handled: culture-sensitive case-insensiti
 that are *not* fixable are simply avoided: ICU folds `ß` to `ss` and .NET does not, and
 .NET's `.` splits surrogate pairs. Neither is reachable from the patterns this code builds.
 
-**Cannot be verified anywhere but a real machine:**
+**Verified on a real Windows 11 machine (2026-09-08):** the app launches, installs its
+low-level keyboard hook, enumerates microphones, loads Parakeet (~1.3 s, ~850 MB working
+set at idle), renders the front panel, tray, Settings and dialogs, and reports faults on the
+panel. The three bugs above were found and fixed that way.
 
-- Text injection into a foreground app. Runners have an interactive desktop but cannot take
-  the foreground.
-- A real microphone: device format negotiation, the OS microphone-privacy block, unplugging
-  mid-capture.
-- The low-level keyboard hook actually firing on a physical keypress.
-- Parakeet transcribing real speech, and whether the ~2 GB working set is tolerable.
+**Still unverified by anyone but a person at the keyboard:**
+
+- Text landing in a foreground app after a spoken dictation, and the transcript quality.
+- The OS microphone-privacy block (the detection exists; the message has not been seen live).
+- Unplugging a microphone mid-capture.
 
 Everything those depend on is behind an interface and exercised with fakes, so the logic
-around them is tested. The bindings themselves are not.
+around them is tested. The bindings themselves are only as tested as the last person who
+held the key.

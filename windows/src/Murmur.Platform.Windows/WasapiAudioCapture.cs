@@ -29,7 +29,7 @@ public sealed class WasapiAudioCapture : IAudioCapture
 {
     private const int BufferMilliseconds = 50;
 
-    private readonly string? _deviceId;
+    private readonly Func<string?> _deviceId;
     private WasapiCapture? _capture;
 
     private Channel<float[]>? _channel;
@@ -39,8 +39,11 @@ public sealed class WasapiAudioCapture : IAudioCapture
     private float[] _pullBuffer = [];
 
     /// <summary>Captures from a specific device, or the default when null.</summary>
-    /// <param name="deviceId">An <c>MMDevice.ID</c>, or null for the system default.</param>
-    public WasapiAudioCapture(string? deviceId = null) => _deviceId = deviceId;
+    /// <param name="deviceId">
+    /// Returns an <c>MMDevice.ID</c>, or null for the system default. A function rather than
+    /// a value so a microphone chosen in Settings is used on the very next recording.
+    /// </param>
+    public WasapiAudioCapture(Func<string?>? deviceId = null) => _deviceId = deviceId ?? (static () => null);
 
     /// <inheritdoc />
     public bool IsCapturing { get; private set; }
@@ -82,11 +85,7 @@ public sealed class WasapiAudioCapture : IAudioCapture
     private void StartCapture()
     {
         using var enumerator = new MMDeviceEnumerator();
-        var device = _deviceId is null
-            // Communications, not Console: this follows the device the user chose as their
-            // default *communication* device, which is what headset users expect.
-            ? enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications)
-            : enumerator.GetDevice(_deviceId);
+        var device = OpenDevice(enumerator, _deviceId());
 
         // Bounded and drop-oldest so a slow consumer can never block the capture thread.
         // Losing the oldest audio is bad; stalling the audio engine is worse.
@@ -134,6 +133,35 @@ public sealed class WasapiAudioCapture : IAudioCapture
         }
 
         throw new InvalidOperationException("Could not open the microphone in any supported format.");
+    }
+
+    /// <summary>
+    /// The chosen device, or the default when none is chosen or the chosen one has gone.
+    /// </summary>
+    /// <remarks>
+    /// A remembered id can point at a headset that is no longer plugged in. Falling back to
+    /// the default is the right call: the user pressed the key to dictate, not to be told
+    /// about a device they already know is in a drawer.
+    /// </remarks>
+    private static MMDevice OpenDevice(MMDeviceEnumerator enumerator, string? chosenId)
+    {
+        if (chosenId is not null)
+        {
+            try
+            {
+                var chosen = enumerator.GetDevice(chosenId);
+                if (chosen.State == DeviceState.Active) return chosen;
+                chosen.Dispose();
+            }
+            catch (COMException)
+            {
+                // Not present any more; fall through.
+            }
+        }
+
+        // Communications, not Console: this follows the device the user chose as their
+        // default *communication* device, which is what headset users expect.
+        return enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
     }
 
     /// <summary>Formats to try, best first.</summary>

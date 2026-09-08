@@ -52,11 +52,16 @@ internal static class PlatformFactory
         if (_resolverInstalled) return;
         _resolverInstalled = true;
 
+        // Any assembly beside the executable, not only the platform layer itself. Found on
+        // the first real-hardware run: the platform DLL loaded fine, then its first call
+        // into NAudio.Wasapi threw FileNotFoundException with the file sitting right there.
+        // A host with a deps.json probes only the assemblies that file lists, and NAudio is
+        // deliberately unknown to this project — so it is resolved here, by file name.
         AssemblyLoadContext.Default.Resolving += (context, name) =>
         {
-            if (!string.Equals(name.Name, AssemblyName, StringComparison.Ordinal)) return null;
+            if (string.IsNullOrEmpty(name.Name)) return null;
 
-            var candidate = System.IO.Path.Combine(AppContext.BaseDirectory, AssemblyName + ".dll");
+            var candidate = System.IO.Path.Combine(AppContext.BaseDirectory, name.Name + ".dll");
             return File.Exists(candidate) ? context.LoadFromAssemblyPath(candidate) : null;
         };
     }
@@ -64,8 +69,13 @@ internal static class PlatformFactory
     private static bool _resolverInstalled;
 
     /// <summary>Creates the WASAPI capture, or null off Windows.</summary>
-    public static IAudioCapture? CreateAudioCapture() =>
-        Create<IAudioCapture>("WasapiAudioCapture", [null]);
+    /// <param name="deviceId">Returns the chosen microphone id, or null for the default.</param>
+    public static IAudioCapture? CreateAudioCapture(Func<string?> deviceId) =>
+        Create<IAudioCapture>("WasapiAudioCapture", [deviceId]);
+
+    /// <summary>Creates the microphone catalogue, or null off Windows.</summary>
+    public static IAudioDeviceCatalog? CreateAudioDeviceCatalog() =>
+        Create<IAudioDeviceCatalog>("WasapiDeviceCatalog", []);
 
     /// <summary>Creates the low-level keyboard hook, or null off Windows.</summary>
     [UnconditionalSuppressMessage(
@@ -90,6 +100,14 @@ internal static class PlatformFactory
     /// <summary>Creates the SendInput injector, or null off Windows.</summary>
     public static ITextInjector? CreateTextInjector() =>
         Create<ITextInjector>("SendInputTextInjector", []);
+
+    /// <summary>Creates the native window tweaks, or null off Windows.</summary>
+    public static IWindowTweaks? CreateWindowTweaks() =>
+        Create<IWindowTweaks>("NativeWindow", []);
+
+    /// <summary>Creates the Run-key registration, or null off Windows.</summary>
+    public static IStartupRegistration? CreateStartupRegistration() =>
+        Create<IStartupRegistration>("StartupRegistration", []);
 
     [UnconditionalSuppressMessage(
         "Trimming",
