@@ -1,9 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input.Platform;
 using Avalonia.Layout;
-using Avalonia.Media;
 using Murmur.App.Controls;
 using Murmur.App.Design;
 using Murmur.Core;
@@ -14,36 +12,37 @@ namespace Murmur.App.Views;
 /// Past transcriptions: searchable, each copyable and deletable.
 /// </summary>
 /// <remarks>
-/// Rows show which dictionary corrections fired. Without that the dictionary is invisible and
-/// there is no way to tell a rule that works from one that never matches.
+/// Rows show which dictionary corrections fired and whether the AI tier rewrote them.
+/// Without that the dictionary is invisible and there is no way to tell a rule that works
+/// from one that never matches.
 /// </remarks>
 public sealed class TranscriptionsView : UserControl
 {
     private readonly TranscriptStore _store;
     private readonly TextBox _search;
     private readonly StackPanel _list;
-    private readonly Silkscreen _count;
+    private readonly TextBlock _count;
 
     /// <summary>Builds the view over <paramref name="store"/>.</summary>
     public TranscriptionsView(TranscriptStore store)
     {
         _store = store;
 
-        _search = Panels.SearchBox("Search transcriptions");
+        _search = Field.Search("Search transcriptions");
         _search.TextChanged += (_, _) => Refresh();
 
-        _list = new StackPanel { Spacing = Tokens.Space.Snug, Margin = new Thickness(Tokens.Space.Base) };
-        _count = new Silkscreen { Foreground = Tokens.Brushes.InkOnDeckDim };
+        _list = new StackPanel { Spacing = Tokens.Space.Base, Margin = new Thickness(0, Tokens.Space.Roomy, 0, Tokens.Space.Roomy) };
+        _count = Text.Caption(string.Empty);
 
-        var clear = Panels.DeckButton("DELETE ALL");
+        var clear = new SgButton("Clear all", SgButton.Kind.Quiet, compact: true);
         clear.Click += (_, _) => { _store.Clear(); Refresh(); };
 
         Content = new DockPanel
         {
             Children =
             {
-                Panels.Docked(Panels.SearchRow(_search), Dock.Top),
-                Panels.Docked(Panels.Footer(_count, clear), Dock.Bottom),
+                Panels.Docked(_search, Dock.Top),
+                Panels.Docked(Panels.Split(_count, clear), Dock.Bottom),
                 new ScrollViewer { Content = _list },
             },
         };
@@ -66,12 +65,13 @@ public sealed class TranscriptionsView : UserControl
         var records = _store.Search(_search.Text ?? string.Empty);
 
         _list.Children.Clear();
-        _count.Text = $"{_store.Records.Count} RECORDING{(_store.Records.Count == 1 ? "" : "S")}";
+        _count.Text = $"{_store.Records.Count} recording{(_store.Records.Count == 1 ? "" : "s")}";
 
         if (records.Count == 0)
         {
             _list.Children.Add(Panels.EmptyState(
-                _store.Records.Count == 0 ? "NO RECORDINGS" : "NO MATCHES",
+                _store.Records.Count == 0 ? "🎙️" : "🔍",
+                _store.Records.Count == 0 ? "No recordings yet" : "No matches",
                 _store.Records.Count == 0 ? "Hold the push-to-talk key and speak." : "Try a different search."));
             return;
         }
@@ -81,120 +81,43 @@ public sealed class TranscriptionsView : UserControl
 
     private Border BuildRow(TranscriptRecord record)
     {
-        var copy = Panels.DeckButton("COPY");
+        var copy = new SgButton("Copy", SgButton.Kind.Ghost, compact: true);
         copy.Click += async (_, _) =>
         {
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
             if (clipboard is not null) await clipboard.SetTextAsync(record.Text).ConfigureAwait(true);
 
-            copy.Content = "COPIED";
+            copy.Content = "Copied";
             await Task.Delay(Tokens.Motion.Confirmation).ConfigureAwait(true);
-            copy.Content = "COPY";
+            copy.Content = "Copy";
         };
 
-        var delete = Panels.DeckButton("DELETE");
+        var delete = new SgButton("Delete", SgButton.Kind.Danger, compact: true);
         delete.Click += (_, _) => _store.Remove(record.Id);
 
-        var header = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Snug,
-            Children =
-            {
-                new Silkscreen
-                {
-                    Text = record.At.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture),
-                    Foreground = Tokens.Brushes.InkOnDeckDim,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-                new TextBlock
-                {
-                    Text = record.ProcessingSeconds.ToString("0.00", CultureInfo.CurrentCulture) + "s",
-                    FontFamily = Tokens.Fonts.Mono,
-                    FontSize = Tokens.Fonts.Caption,
-                    Foreground = Tokens.Brushes.InkOnDeckFaint,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-            },
-        };
+        var meta = new WrapPanel { ItemSpacing = Tokens.Space.Snug, LineSpacing = Tokens.Space.Tight };
+        meta.Children.Add(Text.Caption(record.At.ToLocalTime().ToString("HH:mm  ·  d MMM", CultureInfo.CurrentCulture)));
+        meta.Children.Add(Text.Caption($"{record.AudioSeconds:0.0}s spoken  ·  {record.ProcessingSeconds * 1000:0} ms"));
 
-        var actions = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Tight,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Children = { copy, delete },
-        };
-
-        var body = new StackPanel
-        {
-            Spacing = Tokens.Space.Snug,
-            Children =
-            {
-                new Grid { Children = { header, actions } },
-                new TextBlock
-                {
-                    Text = record.Text,
-                    FontFamily = Tokens.Fonts.Grotesque,
-                    FontSize = Tokens.Fonts.Body,
-                    Foreground = Tokens.Brushes.InkOnDeck,
-                    TextWrapping = TextWrapping.Wrap,
-                },
-            },
-        };
+        if (record.CleanedBy is { Length: > 0 } model) meta.Children.Add(Pill.Brand($"AI · {model}"));
 
         if (record.Corrections is { Count: > 0 } corrections)
         {
-            body.Children.Add(BuildCorrectionBadges(corrections));
-        }
-
-        if (record.CleanedBy is { Length: > 0 } model)
-        {
-            header.Children.Add(new Silkscreen
+            foreach (var correction in corrections)
             {
-                Text = $"AI · {model}",
-                Foreground = Tokens.Brushes.InkOnDeckDim,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
+                var label = correction.Count > 1
+                    ? $"{correction.From} → {correction.To} ×{correction.Count}"
+                    : $"{correction.From} → {correction.To}";
+                meta.Children.Add(Pill.Amber(label));
+            }
         }
 
-        return Panels.DeckCard(body);
-    }
+        var actions = Panels.Row(Tokens.Space.Tight, copy, delete);
+        actions.VerticalAlignment = VerticalAlignment.Top;
 
-    /// <summary>Shows that the dictionary fired, and on what.</summary>
-    private static WrapPanel BuildCorrectionBadges(IReadOnlyList<Dictionary.AppliedCorrection> corrections)
-    {
-        var row = new WrapPanel { ItemSpacing = Tokens.Space.Snug, LineSpacing = Tokens.Space.Tight };
+        var body = Panels.Column(Tokens.Space.Base, Text.Reading(record.Text), meta);
+        body.Margin = new Thickness(0, 0, Tokens.Space.Roomy, 0);
 
-        row.Children.Add(new Silkscreen
-        {
-            Text = "CORRECTED",
-            Foreground = new SolidColorBrush(Tokens.Colors.MeterAmber),
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-
-        foreach (var correction in corrections)
-        {
-            var label = correction.Count > 1
-                ? $"{correction.From} → {correction.To} ×{correction.Count}"
-                : $"{correction.From} → {correction.To}";
-
-            row.Children.Add(new Border
-            {
-                BorderBrush = new SolidColorBrush(Tokens.Colors.MeterAmber, Tokens.Opacity.Faint),
-                BorderThickness = new Thickness(Tokens.Border.Hairline),
-                CornerRadius = new CornerRadius(Tokens.Radius.Chip),
-                Padding = new Thickness(Tokens.Space.Snug, Tokens.Space.Hair),
-                Child = new TextBlock
-                {
-                    Text = label,
-                    FontFamily = Tokens.Fonts.Grotesque,
-                    FontSize = Tokens.Fonts.Caption,
-                    Foreground = Tokens.Brushes.InkOnDeck,
-                },
-            });
-        }
-
-        return row;
+        return Card.Lifting(Panels.Split(body, actions), Tokens.Space.Roomy);
     }
 }

@@ -1,11 +1,10 @@
-using Murmur.Abstractions;
 using System.Diagnostics;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
-using Avalonia.Media;
 using Avalonia.Threading;
+using Murmur.Abstractions;
 using Murmur.App.Controls;
 using Murmur.App.Design;
 using Murmur.Core;
@@ -13,43 +12,33 @@ using Murmur.Speech;
 
 namespace Murmur.App.Views;
 
-/// <summary>Settings: the hotkey, the model, behaviour, start-up.</summary>
+/// <summary>Settings: the key, the microphone, the model, AI clean-up, behaviour.</summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
     Justification = "The token source lives for one download and is disposed in that download's finally; a Window has its own lifecycle and OnClosed cancels any download in flight.")]
-public sealed class SettingsWindow : UnitWindow
+public sealed class SettingsWindow : ShellWindow
 {
-    /// <summary>
-    /// The keys offered, in recommendation order.
-    /// </summary>
-    /// <remarks>
-    /// Right Alt is included but listed last and carries a warning: on German, Polish, UK,
-    /// Nordic and most Latin-American layouts it is AltGr, and binding push-to-talk there
-    /// breaks typing <c>@</c>, <c>€</c>, <c>\</c> and <c>|</c>.
-    /// </remarks>
+    /// <summary>The keys offered, in recommendation order.</summary>
     private static readonly (int Key, string Label, string? Warning)[] Keys =
     [
-        (0xA3, "RIGHT CTRL", null),
-        (0xA1, "RIGHT SHIFT", "Right Shift also fires every time you type a capital letter with your "
-                            + "right hand. Taps under half a second are ignored, but Right Ctrl is quieter."),
-        (0x14, "CAPS LOCK", null),
+        (0xA3, "Right Ctrl", null),
+        (0xA1, "Right Shift", "Right Shift also fires when you type a capital with your right hand. Taps under half a second are ignored, but Right Ctrl is quieter."),
+        (0x14, "Caps Lock", null),
         (0x7C, "F13", null),
-        (0xA5, "RIGHT ALT", "Right Alt is AltGr on many European layouts — binding it here "
-                          + "will interfere with typing @, €, \\ and |."),
+        (0xA5, "Right Alt", "Right Alt is AltGr on many European layouts and will interfere with typing @, €, \\ and |."),
     ];
 
     private readonly Composition _composition;
     private readonly AppSettings _settings;
-    private readonly StackPanel _keyRow;
-    private readonly TextBlock _keyWarning;
+    private readonly Segmented _keys;
+    private readonly Border _keyWarning;
+    private readonly TextBlock _keyWarningText;
 
-    private readonly Lamp _modelLamp;
+    private readonly StatusDot _modelDot;
     private readonly TextBlock _modelStatus;
     private readonly TextBlock _modelDetail;
-    private readonly TransportKey _download;
-    private readonly ProgressGauge _gauge;
+    private readonly SgButton _download;
+    private readonly Gauge _gauge;
     private readonly TextBlock _gaugeText;
-    // Owned for the life of one download and disposed in its finally; the class is not
-    // IDisposable because a Window already has a lifecycle, and OnClosed cancels it.
     private CancellationTokenSource? _downloading;
 
     /// <summary>Raised after a model download completes, so the panel can reload it.</summary>
@@ -61,289 +50,94 @@ public sealed class SettingsWindow : UnitWindow
         _composition = composition;
         _settings = composition.Settings;
 
-        Title = "Sidders Settings";
-        ModelNumber = "SETTINGS";
-        IsResizableUnit = false;
+        Title = "Settings";
+        IsSheet = true;
         Width = Tokens.Layout.SettingsWidth;
         SizeToContent = SizeToContent.Height;
+        // Never taller than the screen: a dialog that runs off the bottom hides its own
+        // footer and cannot be scrolled.
+        MaxHeight = (Screens.Primary?.WorkingArea.Height ?? 900) / (Screens.Primary?.Scaling ?? 1) - Tokens.Space.Page * 2;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        _keyRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Tokens.Space.Snug };
+        _keys = new Segmented(Keys.Select(k => k.Label), Math.Max(0, Array.FindIndex(Keys, k => k.Key == _settings.Data.PushToTalkKey)));
+        _keys.Selected += (_, i) => SelectKey(Keys[i].Key, Keys[i].Warning);
+        _keyWarningText = Text.Body(string.Empty);
+        _keyWarningText.Foreground = Tokens.Brushes.Amber;
+        _keyWarning = Card.Notice(_keyWarningText, Tokens.Brushes.AmberLight, new Avalonia.Media.SolidColorBrush(Tokens.Colors.AmberMid, Tokens.Opacity.Ring));
+        _keyWarning.IsVisible = false;
 
-        _keyWarning = new TextBlock
-        {
-            FontFamily = Tokens.Fonts.Grotesque,
-            FontSize = Tokens.Fonts.Label,
-            Foreground = Tokens.Brushes.MeterAmber,
-            TextWrapping = TextWrapping.Wrap,
-            IsVisible = false,
-        };
-
-        foreach (var (key, label, warning) in Keys)
-        {
-            var button = new TransportKey { Content = label, EngagedColor = Tokens.Colors.Ink };
-            button.Click += (_, _) => SelectKey(key, warning);
-            _keyRow.Children.Add(button);
-        }
-
-        _modelLamp = new Lamp { VerticalAlignment = VerticalAlignment.Center };
-        _modelStatus = Body(string.Empty);
-        _modelDetail = Note(string.Empty);
-        _download = new TransportKey { Content = "DOWNLOAD", EngagedColor = Tokens.Colors.Ink };
+        _modelDot = new StatusDot { VerticalAlignment = VerticalAlignment.Center };
+        _modelStatus = Text.BodyStrong(string.Empty);
+        _modelDetail = Text.Muted(string.Empty);
+        _download = new SgButton("Download model", SgButton.Kind.Primary);
         _download.Click += (_, _) => _ = ToggleDownloadAsync();
-        _gauge = new ProgressGauge { IsVisible = false };
-        _gaugeText = new TextBlock
-        {
-            FontFamily = Tokens.Fonts.Mono,
-            FontSize = Tokens.Fonts.Caption,
-            Foreground = Tokens.Brushes.InkSecondary,
-            IsVisible = false,
-        };
+        _gauge = new Gauge { IsVisible = false };
+        _gaugeText = Text.Caption(string.Empty);
+        _gaugeText.IsVisible = false;
 
-        Content = Frame(AppPaths.ProductName, BuildContent());
-        SelectKey(_settings.Data.PushToTalkKey, WarningFor(_settings.Data.PushToTalkKey));
+        var body = Panels.Column(Tokens.Space.Wide,
+            Card.Standard(Panels.Section("Push to talk", "Which key, and whether you hold it or tap it.", BuildKeySection())),
+            Card.Standard(Panels.Section("Microphone", "Applies to the next recording.", BuildMicrophoneSection())),
+            Card.Standard(Panels.Section("Speech model", "Runs on this machine. Nothing is sent anywhere.", BuildModelSection())),
+            Card.Standard(Panels.Section("AI clean-up", "Optional. Rewrites the transcript with Gemini before typing.", BuildAiSection())),
+            Card.Standard(Panels.Section("Behaviour", null, BuildBehaviourSection())));
+        body.Margin = new Thickness(Tokens.Space.Wide, Tokens.Space.Snug, Tokens.Space.Wide, Tokens.Space.Wide);
+
+        Content = Frame("Settings", new ScrollViewer { Content = body });
+        SelectKey(_settings.Data.PushToTalkKey, WarningFor(_settings.Data.PushToTalkKey), initial: true);
         RefreshModel();
     }
 
     private static string? WarningFor(int key) => Keys.FirstOrDefault(k => k.Key == key).Warning;
 
-    private StackPanel BuildContent()
+    private StackPanel BuildKeySection()
     {
-        var behaviour = new StackPanel
-        {
-            Spacing = Tokens.Space.Snug,
-            Children =
-            {
-                Toggle("Type transcripts into the focused app", _settings.Data.InjectText,
-                    v => Save(_settings.Data with { InjectText = v })),
-                Toggle("Keep a transcript history", _settings.Data.KeepHistory,
-                    v => Save(_settings.Data with { KeepHistory = v })),
-                Toggle("Drop the full stop after a single sentence (chat messages, fragments)",
-                    _settings.Data.DropSingleSentenceFullStop,
-                    v => Save(_settings.Data with { DropSingleSentenceFullStop = v })),
-            },
-        };
+        var mode = new Segmented(["Hold to talk", "Tap to start, tap to stop"], _settings.Data.TapToToggle ? 1 : 0);
+        mode.Selected += (_, i) => { if (_settings.Data.TapToToggle != (i == 1)) Save(_settings.Data with { TapToToggle = i == 1 }); };
 
-        if (_composition.Startup is { } startup)
-        {
-            behaviour.Children.Add(Toggle("Start Sidders when I sign in to Windows", startup.IsEnabled,
-                v => { if (!startup.SetEnabled(v)) Log.Warn("could not change start-up registration"); }));
-        }
-
-        return new StackPanel
-        {
-            Margin = new Thickness(Tokens.Space.Panel),
-            Spacing = Tokens.Space.Wide,
-            Children =
-            {
-                Section("PUSH TO TALK", new StackPanel
-                {
-                    Spacing = Tokens.Space.Snug,
-                    Children =
-                    {
-                        _keyRow,
-                        _keyWarning,
-                        BuildModeRow(),
-                        Note("The key is passed through to the focused app rather than swallowed, so it "
-                           + "never gets stuck down. Tap mode avoids the Windows Filter Keys prompt, which "
-                           + "appears when Right Shift is held for eight seconds."),
-                    },
-                }),
-                Section("MICROPHONE", BuildMicrophoneSection()),
-                Section("MODEL", BuildModelSection()),
-                Section("AI CLEAN-UP", BuildAiSection()),
-                Section("BEHAVIOUR", behaviour),
-            },
-        };
+        return Panels.Column(Tokens.Space.Base,
+            _keys,
+            _keyWarning,
+            mode,
+            Text.Muted("The key is passed through, never swallowed, so it can't get stuck down. Tap mode avoids the Windows Filter Keys prompt that appears when Right Shift is held for eight seconds."));
     }
 
-    /// <summary>Hold-to-talk versus tap-to-toggle, as two latching keys.</summary>
-    private StackPanel BuildModeRow()
-    {
-        var hold = new TransportKey { Content = "HOLD TO TALK", EngagedColor = Tokens.Colors.Ink };
-        var tap = new TransportKey { Content = "TAP TO START · TAP TO STOP", EngagedColor = Tokens.Colors.Ink };
-
-        void Select(bool toggle)
-        {
-            hold.IsEngaged = !toggle;
-            tap.IsEngaged = toggle;
-            if (_settings.Data.TapToToggle != toggle) Save(_settings.Data with { TapToToggle = toggle });
-        }
-
-        hold.Click += (_, _) => Select(false);
-        tap.Click += (_, _) => Select(true);
-        Select(_settings.Data.TapToToggle);
-
-        return new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Snug,
-            Margin = new Thickness(0, Tokens.Space.Tight, 0, 0),
-            Children = { hold, tap },
-        };
-    }
-
-    /// <summary>The generative tier: a toggle, the key, the model, and a live test.</summary>
-    private StackPanel BuildAiSection()
-    {
-        var key = new TextBox
-        {
-            Text = _settings.Data.GeminiApiKey ?? string.Empty,
-            Watermark = "Gemini API key (or set GEMINI_API_KEY)",
-            PasswordChar = '•',
-            FontFamily = Tokens.Fonts.Mono,
-            FontSize = Tokens.Fonts.Body,
-            Foreground = Tokens.Brushes.InkOnDeck,
-            Background = Tokens.Brushes.Deck,
-            BorderBrush = Tokens.Brushes.Seam,
-            BorderThickness = new Thickness(Tokens.Border.Hairline),
-            CornerRadius = new CornerRadius(Tokens.Radius.Chip),
-            Padding = new Thickness(Tokens.Space.Snug),
-        };
-        key.LostFocus += (_, _) =>
-        {
-            var value = string.IsNullOrWhiteSpace(key.Text) ? null : key.Text.Trim();
-            if (_settings.Data.GeminiApiKey != value) Save(_settings.Data with { GeminiApiKey = value });
-        };
-
-        var model = new TextBox
-        {
-            Text = _settings.Data.GeminiModel ?? GeminiCleaner.DefaultModel,
-            Watermark = GeminiCleaner.DefaultModel,
-            FontFamily = Tokens.Fonts.Mono,
-            FontSize = Tokens.Fonts.Body,
-            Foreground = Tokens.Brushes.InkOnDeck,
-            Background = Tokens.Brushes.Deck,
-            BorderBrush = Tokens.Brushes.Seam,
-            BorderThickness = new Thickness(Tokens.Border.Hairline),
-            CornerRadius = new CornerRadius(Tokens.Radius.Chip),
-            Padding = new Thickness(Tokens.Space.Snug),
-        };
-        model.LostFocus += (_, _) =>
-        {
-            var value = string.IsNullOrWhiteSpace(model.Text) || model.Text.Trim() == GeminiCleaner.DefaultModel ? null : model.Text.Trim();
-            if (_settings.Data.GeminiModel != value) Save(_settings.Data with { GeminiModel = value });
-        };
-
-        var result = Note(string.Empty);
-        var test = new TransportKey { Content = "TEST" };
-        test.Click += async (_, _) =>
-        {
-            const string sample = "um so can you uh send me the the Q2 numbers by friday scratch that by thursday";
-            test.IsEnabled = false;
-            result.Text = "Sending a sample…";
-            try
-            {
-                using var cleaner = new GeminiCleaner(() => _settings.Data.GeminiApiKey, _settings.Data.GeminiModel);
-                var cleaned = await cleaner.CleanAsync(sample, CancellationToken.None).ConfigureAwait(true);
-                result.Text = cleaned is null
-                    ? $"Failed: {cleaner.LastError ?? "no reply"}"
-                    : $"“{sample}”  →  “{cleaned}”";
-            }
-            finally
-            {
-                test.IsEnabled = true;
-            }
-        };
-
-        return new StackPanel
-        {
-            Spacing = Tokens.Space.Snug,
-            Children =
-            {
-                Toggle("Clean up transcripts with Gemini before typing", _settings.Data.AiCleanup,
-                    v => Save(_settings.Data with { AiCleanup = v })),
-                Note("Removes fillers and false starts, applies “scratch that”, “new line” and "
-                   + "“bullet points”, and fixes punctuation. Your words leave this machine for "
-                   + "Google's API; roughly a twentieth of a penny per dictation on Flash. If the API "
-                   + "does not answer within eight seconds the raw transcript is typed instead."),
-                Panels.Labelled("API KEY", key),
-                Panels.Labelled("MODEL", model),
-                new StackPanel { Orientation = Orientation.Horizontal, Spacing = Tokens.Space.Snug, Children = { test } },
-                result,
-            },
-        };
-    }
-
-    /// <summary>
-    /// One row per microphone, plus "system default". Selecting saves immediately and takes
-    /// effect on the next recording.
-    /// </summary>
     private StackPanel BuildMicrophoneSection()
     {
-        var list = new StackPanel { Spacing = Tokens.Space.Tight };
+        var list = Panels.Column(Tokens.Space.Snug);
         var devices = _composition.Devices?.ListCaptureDevices() ?? [];
 
         if (_composition.Devices is null)
         {
-            list.Children.Add(Note("Microphone selection is not available on this platform."));
+            list.Children.Add(Text.Muted("Microphone selection is not available on this platform."));
             return list;
         }
 
-        var rows = new List<(string? Id, Border Row, Lamp Lamp)>();
+        var rows = new List<(string? Id, StatusDot Dot, Border Row)>();
+        var chosen = _settings.Data.MicrophoneDeviceId;
 
         void Select(string? id)
         {
-            foreach (var (rowId, _, lamp) in rows) lamp.IsLit = rowId == id;
+            foreach (var (rowId, dot, row) in rows)
+            {
+                var active = rowId == id;
+                dot.Fill = active ? Tokens.Brushes.Brand : Tokens.Brushes.Line;
+                row.Background = active ? Tokens.Brushes.BrandLight : Tokens.Brushes.Surface;
+            }
             if (_settings.Data.MicrophoneDeviceId != id) Save(_settings.Data with { MicrophoneDeviceId = id });
         }
 
         Border Row(string? id, string name, bool isDefault)
         {
-            var lamp = new Lamp
-            {
-                LampColor = Tokens.Colors.MeterGreen,
-                Width = Tokens.Material.LampSizeSmall,
-                Height = Tokens.Material.LampSizeSmall,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
+            var dot = new StatusDot { VerticalAlignment = VerticalAlignment.Center };
+            var label = Panels.Row(Tokens.Space.Snug, Text.Body(name));
+            if (isDefault) label.Children.Add(Pill.Neutral("Windows default"));
 
-            var label = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = Tokens.Space.Snug,
-                VerticalAlignment = VerticalAlignment.Center,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = name,
-                        FontFamily = Tokens.Fonts.Grotesque,
-                        FontSize = Tokens.Fonts.Body,
-                        Foreground = Tokens.Brushes.InkOnDeck,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    },
-                },
-            };
-
-            if (isDefault)
-            {
-                label.Children.Add(new Silkscreen
-                {
-                    Text = "WINDOWS DEFAULT",
-                    Foreground = Tokens.Brushes.InkOnDeckDim,
-                    VerticalAlignment = VerticalAlignment.Center,
-                });
-            }
-
-            var row = new Border
-            {
-                Background = Tokens.Brushes.Deck,
-                CornerRadius = new CornerRadius(Tokens.Radius.Chip),
-                BorderBrush = Tokens.Brushes.Seam,
-                BorderThickness = new Thickness(Tokens.Border.Hairline),
-                Padding = new Thickness(Tokens.Space.Base, Tokens.Space.Snug),
-                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
-                Child = new StackPanel
-                {
-                    Orientation = Orientation.Horizontal,
-                    Spacing = Tokens.Space.Base,
-                    Children = { lamp, label },
-                },
-            };
+            var row = Card.Subtle(Panels.Row(Tokens.Space.Base, dot, label), Tokens.Space.Base);
+            row.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
             row.PointerPressed += (_, _) => Select(id);
-            rows.Add((id, row, lamp));
+            rows.Add((id, dot, row));
             return row;
         }
 
@@ -352,48 +146,96 @@ public sealed class SettingsWindow : UnitWindow
 
         if (devices.Count == 0)
         {
-            list.Children.Add(Note("No active microphone was found. Plug one in, or check Settings → "
-                                 + "Privacy & security → Microphone."));
+            list.Children.Add(Text.Muted("No active microphone found. Plug one in, or check Settings → Privacy & security → Microphone."));
         }
 
-        var chosen = _settings.Data.MicrophoneDeviceId;
         if (chosen is not null && devices.All(d => d.Id != chosen))
         {
-            list.Children.Add(Note("The microphone you chose is not connected right now; the Windows "
-                                 + "default will be used until it is."));
+            list.Children.Add(Text.Muted("The microphone you chose isn't connected right now; the Windows default is used until it is."));
         }
 
-        foreach (var (rowId, _, lamp) in rows) lamp.IsLit = rowId == chosen;
+        foreach (var (rowId, dot, row) in rows)
+        {
+            var active = rowId == chosen;
+            dot.Fill = active ? Tokens.Brushes.Brand : Tokens.Brushes.Line;
+            row.Background = active ? Tokens.Brushes.BrandLight : Tokens.Brushes.Surface;
+        }
 
-        list.Children.Add(Note("Applies to the next recording. Pick the microphone you actually "
-                             + "dictate into — a laptop's built-in array picks up the room."));
         return list;
     }
 
     private StackPanel BuildModelSection()
     {
-        var openFolder = new TransportKey { Content = "OPEN FOLDER" };
+        var openFolder = new SgButton("Open folder", SgButton.Kind.Ghost);
         openFolder.Click += (_, _) => OpenFolder(ModelDownloader.DefaultTarget);
 
-        var status = new StackPanel
+        return Panels.Column(Tokens.Space.Base,
+            Panels.Row(Tokens.Space.Snug, _modelDot, _modelStatus),
+            _modelDetail,
+            Panels.Row(Tokens.Space.Snug, _download, openFolder),
+            _gauge,
+            _gaugeText);
+    }
+
+    private StackPanel BuildAiSection()
+    {
+        var key = Field.Text("Gemini API key, or leave blank to use GEMINI_API_KEY", _settings.Data.GeminiApiKey, secret: true);
+        key.LostFocus += (_, _) =>
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Snug,
-            Children = { _modelLamp, _modelStatus },
+            var value = string.IsNullOrWhiteSpace(key.Text) ? null : key.Text.Trim();
+            if (_settings.Data.GeminiApiKey != value) Save(_settings.Data with { GeminiApiKey = value });
         };
 
-        var keys = new StackPanel
+        var model = Field.Text(GeminiCleaner.DefaultModel, _settings.Data.GeminiModel ?? GeminiCleaner.DefaultModel);
+        model.LostFocus += (_, _) =>
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Snug,
-            Children = { _download, openFolder },
+            var value = string.IsNullOrWhiteSpace(model.Text) || model.Text.Trim() == GeminiCleaner.DefaultModel ? null : model.Text.Trim();
+            if (_settings.Data.GeminiModel != value) Save(_settings.Data with { GeminiModel = value });
         };
 
-        return new StackPanel
+        var result = Text.Muted(string.Empty);
+        var test = new SgButton("Test with a sample", SgButton.Kind.Ghost);
+        test.Click += async (_, _) =>
         {
-            Spacing = Tokens.Space.Snug,
-            Children = { status, _modelDetail, keys, _gauge, _gaugeText },
+            const string sample = "um so can you uh send me the the Q2 numbers by friday scratch that by thursday";
+            test.IsEnabled = false;
+            result.Text = "Sending…";
+            try
+            {
+                using var cleaner = new GeminiCleaner(() => _settings.Data.GeminiApiKey, _settings.Data.GeminiModel);
+                var cleaned = await cleaner.CleanAsync(sample, CancellationToken.None).ConfigureAwait(true);
+                result.Text = cleaned is null ? $"Failed: {cleaner.LastError ?? "no reply"}" : $"“{sample}”\n→ “{cleaned}”";
+            }
+            finally
+            {
+                test.IsEnabled = true;
+            }
         };
+
+        return Panels.Column(Tokens.Space.Base,
+            Panels.SwitchRow("Clean up with Gemini before typing",
+                "Removes fillers and false starts, applies “scratch that” and “new line”, fixes punctuation. Your words go to Google's API — about a twentieth of a penny per dictation on Flash. If it doesn't answer in eight seconds the raw transcript is typed.",
+                _settings.Data.AiCleanup, v => Save(_settings.Data with { AiCleanup = v })),
+            Panels.Labelled("API key", key),
+            Panels.Labelled("Model", model),
+            test,
+            result);
+    }
+
+    private StackPanel BuildBehaviourSection()
+    {
+        var column = Panels.Column(Tokens.Space.Roomy,
+            Panels.SwitchRow("Type into the focused app", "Off keeps the history only.", _settings.Data.InjectText, v => Save(_settings.Data with { InjectText = v })),
+            Panels.SwitchRow("Keep a history", null, _settings.Data.KeepHistory, v => Save(_settings.Data with { KeepHistory = v })),
+            Panels.SwitchRow("Drop the full stop after a single sentence", "For chat messages and fragments. Questions and longer dictations keep their punctuation.", _settings.Data.DropSingleSentenceFullStop, v => Save(_settings.Data with { DropSingleSentenceFullStop = v })));
+
+        if (_composition.Startup is { } startup)
+        {
+            column.Children.Add(Panels.SwitchRow("Start when I sign in to Windows", "Starts in the tray.", startup.IsEnabled,
+                v => { if (!startup.SetEnabled(v)) Log.Warn("could not change start-up registration"); }));
+        }
+
+        return column;
     }
 
     private void RefreshModel()
@@ -401,20 +243,13 @@ public sealed class SettingsWindow : UnitWindow
         var located = ParakeetTranscriber.Locate();
         var loaded = _composition.Transcriber?.IsReady == true;
 
-        _modelLamp.IsLit = true;
-        _modelLamp.LampColor = located is null ? Tokens.Colors.MeterAmber : loaded ? Tokens.Colors.MeterGreen : Tokens.Colors.MeterAmber;
-        _modelStatus.Text = located is null
-            ? "Parakeet not installed"
-            : loaded ? "Parakeet ready" : "Parakeet found — loading";
+        _modelDot.Fill = located is null ? Tokens.Brushes.AmberMid : loaded ? Tokens.Brushes.Brand : Tokens.Brushes.BrandMid;
+        _modelStatus.Text = located is null ? "Parakeet not installed" : loaded ? "Parakeet ready" : "Parakeet found, loading";
 
         var size = (ModelDownloader.ApproximateBytes / 1_000_000d).ToString("0", CultureInfo.CurrentCulture);
         _modelDetail.Text = located is not null
-            // Showing the resolved path matters: "model not found" is unactionable without
-            // knowing which directory was actually checked.
             ? $"Loaded from {located}"
-            : "Windows has no built-in speech engine, so Murmur cannot transcribe until the "
-            + $"Parakeet model is downloaded (~{size} MB, once, from Hugging Face). It runs "
-            + "entirely on this machine afterwards.";
+            : $"Windows has no built-in speech engine, so {AppPaths.ProductName} can't transcribe until the Parakeet model is downloaded — about {size} MB, once, from Hugging Face. It runs entirely on this machine afterwards.";
 
         _download.IsVisible = located is null || _downloading is not null;
     }
@@ -428,7 +263,7 @@ public sealed class SettingsWindow : UnitWindow
         }
 
         _downloading = new CancellationTokenSource();
-        _download.Content = "CANCEL";
+        _download.Content = "Cancel";
         _gauge.IsVisible = true;
         _gaugeText.IsVisible = true;
         _gauge.Fraction = 0;
@@ -438,7 +273,7 @@ public sealed class SettingsWindow : UnitWindow
             _gauge.Fraction = p.Fraction;
             var received = (p.BytesReceived / 1_000_000d).ToString("0.0", CultureInfo.CurrentCulture);
             var total = p.TotalBytes is { } t ? (t / 1_000_000d).ToString("0.0", CultureInfo.CurrentCulture) : "?";
-            _gaugeText.Text = $"{p.File.ToUpperInvariant()}  {received} / {total} MB   ({p.FileIndex + 1} OF {p.FileCount})";
+            _gaugeText.Text = $"{p.File}  {received} / {total} MB  ({p.FileIndex + 1} of {p.FileCount})";
         }));
 
         try
@@ -447,45 +282,39 @@ public sealed class SettingsWindow : UnitWindow
             Log.Info("model download started");
             await downloader.DownloadAsync(ModelDownloader.DefaultTarget, progress, _downloading.Token).ConfigureAwait(true);
             Log.Info("model download complete");
-            _gaugeText.Text = "DOWNLOAD COMPLETE";
+            _gaugeText.Text = "Download complete";
             ModelChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException)
         {
-            _gaugeText.Text = "CANCELLED";
+            _gaugeText.Text = "Cancelled";
         }
         catch (Exception e) when (e is HttpRequestException or IOException or UnauthorizedAccessException)
         {
             Log.Error("model download failed", e);
-            _gaugeText.Text = $"FAILED: {e.Message}";
+            _gaugeText.Text = $"Failed: {e.Message}";
         }
         finally
         {
             _downloading.Dispose();
             _downloading = null;
-            _download.Content = "DOWNLOAD";
+            _download.Content = "Download model";
             _gauge.IsVisible = false;
             RefreshModel();
         }
     }
 
-    private void SelectKey(int key, string? warning)
+    private void SelectKey(int key, string? warning, bool initial = false)
     {
-        for (var i = 0; i < Keys.Length; i++)
-        {
-            ((TransportKey)_keyRow.Children[i]).IsEngaged = Keys[i].Key == key;
-        }
-
-        _keyWarning.Text = warning ?? string.Empty;
-        _keyWarning.IsVisible = warning is not null;
-
-        if (_settings.Data.PushToTalkKey != key)
+        var text = warning;
+        if (!initial && _settings.Data.PushToTalkKey != key)
         {
             Save(_settings.Data with { PushToTalkKey = key });
-            _keyWarning.Text = (warning is null ? string.Empty : warning + " ")
-                             + "The new key takes effect the next time Murmur starts.";
-            _keyWarning.IsVisible = true;
+            text = (warning is null ? string.Empty : warning + " ") + $"The new key takes effect the next time {AppPaths.ProductName} starts.";
         }
+
+        _keyWarningText.Text = text ?? string.Empty;
+        _keyWarning.IsVisible = text is not null;
     }
 
     private void Save(SettingsData data) => _settings.Update(data);
@@ -505,89 +334,10 @@ public sealed class SettingsWindow : UnitWindow
         }
     }
 
-    private static BrushedPanel Section(string label, Control content) => new()
-    {
-        Child = new StackPanel
-        {
-            Margin = new Thickness(Tokens.Space.Roomy),
-            Spacing = Tokens.Space.Base,
-            Children = { new Silkscreen { Text = label, IsLarge = true }, content },
-        },
-    };
-
-    private static TextBlock Body(string text) => new()
-    {
-        Text = text,
-        FontFamily = Tokens.Fonts.Grotesque,
-        FontSize = Tokens.Fonts.Body,
-        Foreground = Tokens.Brushes.Ink,
-        VerticalAlignment = VerticalAlignment.Center,
-    };
-
-    private static TextBlock Note(string text) => new()
-    {
-        Text = text,
-        FontFamily = Tokens.Fonts.Grotesque,
-        FontSize = Tokens.Fonts.Label,
-        Foreground = Tokens.Brushes.InkSecondary,
-        TextWrapping = TextWrapping.Wrap,
-    };
-
-    private static CheckBox Toggle(string label, bool value, Action<bool> onChange)
-    {
-        var box = new CheckBox
-        {
-            IsChecked = value,
-            Content = new TextBlock
-            {
-                Text = label,
-                FontFamily = Tokens.Fonts.Grotesque,
-                FontSize = Tokens.Fonts.Body,
-                Foreground = Tokens.Brushes.Ink,
-            },
-        };
-
-        box.IsCheckedChanged += (_, _) => onChange(box.IsChecked ?? false);
-        return box;
-    }
-
     /// <inheritdoc />
     protected override void OnClosed(EventArgs e)
     {
         _downloading?.Cancel();
         base.OnClosed(e);
-    }
-}
-
-/// <summary>
-/// A flat gauge on the deck for the model download. Not for recording — the record
-/// indicator is the VU meter — but a download has an end, and a bar is the honest shape.
-/// </summary>
-public sealed class ProgressGauge : Control
-{
-    /// <summary>How far along, 0…1.</summary>
-    public static readonly StyledProperty<double> FractionProperty =
-        AvaloniaProperty.Register<ProgressGauge, double>(nameof(Fraction));
-
-    /// <inheritdoc cref="FractionProperty"/>
-    public double Fraction
-    {
-        get => GetValue(FractionProperty);
-        set => SetValue(FractionProperty, value);
-    }
-
-    static ProgressGauge() => AffectsRender<ProgressGauge>(FractionProperty);
-
-    /// <summary>Creates a gauge at the token height.</summary>
-    public ProgressGauge() => Height = Tokens.Layout.GaugeHeight;
-
-    /// <inheritdoc />
-    public override void Render(DrawingContext context)
-    {
-        var bounds = new Rect(Bounds.Size);
-        context.DrawRectangle(Tokens.Brushes.Deck, new Pen(Tokens.Brushes.Seam, Tokens.Border.Hairline), new RoundedRect(bounds, Tokens.Radius.Chip));
-
-        var fill = bounds.Deflate(Tokens.Space.Hair).WithWidth(Math.Max(0, (bounds.Width - 2 * Tokens.Space.Hair) * Math.Clamp(Fraction, 0, 1)));
-        context.DrawRectangle(Tokens.Brushes.InkOnDeck, null, new RoundedRect(fill, Tokens.Radius.Chip));
     }
 }

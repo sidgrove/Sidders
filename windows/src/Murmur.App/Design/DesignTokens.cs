@@ -1,270 +1,243 @@
 using Avalonia;
 using Avalonia.Media;
-using Avalonia.Styling;
 
 namespace Murmur.App.Design;
 
 /// <summary>
-/// The design system, in one place.
+/// The Sidgrove design system, as tokens.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A direct port of <c>DesignSystem.swift</c> — same names, same values, so the two platforms
-/// stay recognisably one product. Direction: 1980s portable field recorders and cassette
-/// decks. Equipment, not theme.
+/// Mirrors <c>lib/tokens.ts</c> and <c>globals.css</c> in Sidgrove Intelligence, and the
+/// sidgrove-brand reference: lavender-blue brand, cool-slate neutrals with a blue undertone,
+/// white cards on a washed background, DM Sans everywhere, sentence case, soft layered
+/// shadows, radii on the tightened "crispness" scale (card 12, inner 10, control 8, pill 99).
 /// </para>
 /// <para>
 /// <b>Views must not contain literal values.</b> If a control needs a number that isn't here,
 /// add the token rather than inlining it.
 /// </para>
-/// <para>Two rules that are not negotiable:</para>
-/// <list type="bullet">
-/// <item><b>Red means recording.</b> Nothing else in the app is red.</item>
-/// <item><b>Amber and green are instrumentation only</b> — level meters and indicator lamps,
-/// never UI chrome.</item>
-/// </list>
 /// <para>
-/// Explicitly ruled out: neon, vaporwave, synthwave, purple/pink gradients, glowing text,
-/// chrome lettering, grid horizons. There are <b>no gradients anywhere</b>; depth comes from
-/// flat panels, hairline bevels, hard short shadows and procedurally-drawn brushed grain.
+/// Colour rules from the brand: brand blue for the primary action and anything "live";
+/// rose only for negative or attention; amber only for warnings; no other hues.
 /// </para>
 /// </remarks>
 public static class Tokens
 {
-    /// <summary>
-    /// Whether the black-face palette is in use.
-    /// </summary>
-    /// <remarks>
-    /// Decks shipped in two finishes, so the app does too: <b>silver face</b> (brushed
-    /// aluminium, the Sony TC-D5) in light, <b>black face</b> (matte, the Marantz PMD) in dark.
-    /// </remarks>
-    public static bool IsBlackFace =>
-        Application.Current?.ActualThemeVariant == ThemeVariant.Dark;
-
     // ---- Colour ----
 
-    /// <summary>Surfaces, from the outer body inward.</summary>
+    /// <summary>The palette. Names follow the <c>T</c> object in the web apps.</summary>
     public static class Colors
     {
-        /// <summary>The outer body of the unit. Darkest surface; frames everything.</summary>
-        public static Color Chassis => Face(0x2A2825, 0x121110);
+        /// <summary>Brand lavender-blue. Accent, active states, the listening bars.</summary>
+        public static Color Brand => Rgb(0x6874B4);
 
-        /// <summary>The main working surface.</summary>
-        public static Color Panel => Face(0xB8B4AD, 0x2E2C29);
+        /// <summary>Very light brand tint, for hover and selected backgrounds.</summary>
+        public static Color BrandLight => Rgb(0xEEF0FA);
 
-        /// <summary>Top bevel highlight on a raised element.</summary>
-        public static Color PanelHighlight => Face(0xC9C5BE, 0x3C3936);
+        /// <summary>Mid tint, placeholder dots and idle bars.</summary>
+        public static Color BrandMid => Rgb(0xA8B0D8);
 
-        /// <summary>Bottom bevel shade on a raised element.</summary>
-        public static Color PanelShade => Face(0x9E9A93, 0x211F1D);
+        /// <summary>Dark brand, strong text and the far end of the primary gradient.</summary>
+        public static Color BrandStrong => Rgb(0x3D4785);
 
-        /// <summary>Recessed wells, set into the panel.</summary>
-        public static Color Well => Face(0x6E6A64, 0x1A1917);
+        /// <summary>Muted rose: negative, attention, the recording dot in the tray.</summary>
+        public static Color Rose => Rgb(0xB8456B);
 
-        /// <summary>The dark readout window of a tape deck.</summary>
-        public static Color Deck => Face(0x38352F, 0x151412);
+        /// <summary>Rose tint background.</summary>
+        public static Color RoseLight => Rgb(0xFDF2F6);
 
-        /// <summary>Button caps and other moulded plastic.</summary>
-        public static Color Cap => Face(0xE8E3D8, 0x35322E);
+        /// <summary>Muted amber text.</summary>
+        public static Color Amber => Rgb(0x7A5E1E);
 
-        /// <summary>The hard line where two panels meet.</summary>
-        public static Color Seam => Face(0x6B6862, 0x000000);
+        /// <summary>Amber mid, for warning badges.</summary>
+        public static Color AmberMid => Rgb(0xC69B2D);
 
-        /// <summary>Primary readable text.</summary>
-        public static Color Ink => Face(0x1C1A17, 0xE4DED0);
+        /// <summary>Amber tint background.</summary>
+        public static Color AmberLight => Rgb(0xFDF9EE);
 
-        /// <summary>Supporting text.</summary>
-        public static Color InkSecondary => Face(0x514D47, 0x9A948A);
+        /// <summary>Primary text and headings.</summary>
+        public static Color Ink => Rgb(0x1A1D2E);
 
-        /// <summary>Silkscreened labels printed onto the panel.</summary>
-        public static Color Silkscreen => Face(0x3A3630, 0xB0AA9E);
+        /// <summary>Secondary text.</summary>
+        public static Color Muted => Rgb(0x525672);
 
-        /// <summary>Silkscreen printed onto the dark chassis, regardless of face.</summary>
-        public static Color SilkscreenOnChassis => Rgb(0x9C968A);
+        /// <summary>Tertiary text, placeholders. Clears AA on the wash.</summary>
+        public static Color Faint => Rgb(0x646982);
 
-        /// <summary>Text on a dark readout well, regardless of face.</summary>
-        public static Color InkOnDeck => Rgb(0xD8D2C4);
+        /// <summary>Borders and dividers.</summary>
+        public static Color Line => Rgb(0xDFE1EE);
 
-        /// <summary>The record lamp. Lacquered, not fluorescent. The only red in the app.</summary>
-        public static Color Record => Rgb(0xC8342A);
+        /// <summary>Card borders, a touch stronger than a divider.</summary>
+        public static Color CardBorder => Rgb(0xD8DEEC);
 
-        /// <summary>The record lamp unlit — a dark lens, not an absence.</summary>
-        public static Color RecordIdle => Face(0x7A4A45, 0x4A2724);
+        /// <summary>Inner panel and hover background.</summary>
+        public static Color Surface => Rgb(0xF6F7FC);
 
-        /// <summary>A selected row. The panel lifts rather than tints.</summary>
-        public static Color Selection => Face(0xCDC8C0, 0x3A3733);
+        /// <summary>The page wash behind everything.</summary>
+        public static Color Wash => Rgb(0xF0F1F8);
 
-        /// <summary>Edge on a selected or focused element.</summary>
-        public static Color SelectionEdge => Face(0x8A857D, 0x585349);
+        /// <summary>Card background.</summary>
+        public static Color Card => Rgb(0xFFFFFF);
 
-        /// <summary>Keyboard focus ring. Reads without relying on colour.</summary>
-        public static Color FocusRing => Face(0x6B665E, 0x726C61);
-
-        /// <summary>Row under the pointer, before selection.</summary>
-        public static Color Hover => Face(0xC2BDB6, 0x343130);
-
-        /// <summary>A row on the dark deck under the pointer.</summary>
-        public static Color DeckHover => Rgb(0x201E1B);
-
-        // Instrumentation only. Never use these for UI chrome.
-
-        /// <summary>Classic cream VU face.</summary>
-        public static Color MeterFace => Rgb(0xD8CFB4);
-
-        /// <summary>The amber lamp behind a VU face.</summary>
-        public static Color MeterLamp => Rgb(0xE8B860);
-
-        /// <summary>Needle and scale printing.</summary>
-        public static Color MeterNeedle => Rgb(0x1C1A17);
-
-        /// <summary>Nominal level.</summary>
-        public static Color MeterGreen => Rgb(0x6F9E45);
-
-        /// <summary>Approaching peak.</summary>
-        public static Color MeterAmber => Rgb(0xD39A2E);
-
-        /// <summary>Over.</summary>
-        public static Color MeterRed => Rgb(0xC0392B);
+        /// <summary>Text on a brand-coloured surface.</summary>
+        public static Color OnBrand => Rgb(0xFFFFFF);
 
         private static Color Rgb(uint hex) => Color.FromRgb(
             (byte)((hex >> 16) & 0xFF), (byte)((hex >> 8) & 0xFF), (byte)(hex & 0xFF));
-
-        private static Color Face(uint light, uint dark) => Rgb(IsBlackFace ? dark : light);
     }
 
-    /// <summary>Brushes for the colours above, allocated per call.</summary>
+    /// <summary>Brushes for the colours above.</summary>
     public static class Brushes
     {
-        /// <inheritdoc cref="Colors.Chassis"/>
-        public static IBrush Chassis => new SolidColorBrush(Colors.Chassis);
+        /// <inheritdoc cref="Colors.Brand"/>
+        public static IBrush Brand { get; } = new SolidColorBrush(Colors.Brand);
 
-        /// <inheritdoc cref="Colors.Panel"/>
-        public static IBrush Panel => new SolidColorBrush(Colors.Panel);
+        /// <inheritdoc cref="Colors.BrandLight"/>
+        public static IBrush BrandLight { get; } = new SolidColorBrush(Colors.BrandLight);
 
-        /// <inheritdoc cref="Colors.Well"/>
-        public static IBrush Well => new SolidColorBrush(Colors.Well);
+        /// <inheritdoc cref="Colors.BrandMid"/>
+        public static IBrush BrandMid { get; } = new SolidColorBrush(Colors.BrandMid);
 
-        /// <inheritdoc cref="Colors.Deck"/>
-        public static IBrush Deck => new SolidColorBrush(Colors.Deck);
+        /// <inheritdoc cref="Colors.BrandStrong"/>
+        public static IBrush BrandStrong { get; } = new SolidColorBrush(Colors.BrandStrong);
 
-        /// <inheritdoc cref="Colors.Cap"/>
-        public static IBrush Cap => new SolidColorBrush(Colors.Cap);
+        /// <inheritdoc cref="Colors.Rose"/>
+        public static IBrush Rose { get; } = new SolidColorBrush(Colors.Rose);
+
+        /// <inheritdoc cref="Colors.RoseLight"/>
+        public static IBrush RoseLight { get; } = new SolidColorBrush(Colors.RoseLight);
+
+        /// <inheritdoc cref="Colors.Amber"/>
+        public static IBrush Amber { get; } = new SolidColorBrush(Colors.Amber);
+
+        /// <inheritdoc cref="Colors.AmberMid"/>
+        public static IBrush AmberMid { get; } = new SolidColorBrush(Colors.AmberMid);
+
+        /// <inheritdoc cref="Colors.AmberLight"/>
+        public static IBrush AmberLight { get; } = new SolidColorBrush(Colors.AmberLight);
 
         /// <inheritdoc cref="Colors.Ink"/>
-        public static IBrush Ink => new SolidColorBrush(Colors.Ink);
+        public static IBrush Ink { get; } = new SolidColorBrush(Colors.Ink);
 
-        /// <inheritdoc cref="Colors.InkSecondary"/>
-        public static IBrush InkSecondary => new SolidColorBrush(Colors.InkSecondary);
+        /// <inheritdoc cref="Colors.Muted"/>
+        public static IBrush Muted { get; } = new SolidColorBrush(Colors.Muted);
 
-        /// <inheritdoc cref="Colors.Silkscreen"/>
-        public static IBrush Silkscreen => new SolidColorBrush(Colors.Silkscreen);
+        /// <inheritdoc cref="Colors.Faint"/>
+        public static IBrush Faint { get; } = new SolidColorBrush(Colors.Faint);
 
-        /// <inheritdoc cref="Colors.SilkscreenOnChassis"/>
-        public static IBrush SilkscreenOnChassis => new SolidColorBrush(Colors.SilkscreenOnChassis);
+        /// <inheritdoc cref="Colors.Line"/>
+        public static IBrush Line { get; } = new SolidColorBrush(Colors.Line);
 
-        /// <inheritdoc cref="Colors.InkOnDeck"/>
-        public static IBrush InkOnDeck => new SolidColorBrush(Colors.InkOnDeck);
+        /// <inheritdoc cref="Colors.CardBorder"/>
+        public static IBrush CardBorder { get; } = new SolidColorBrush(Colors.CardBorder);
 
-        /// <summary>Ink on the deck at a reduced opacity, for secondary readout text.</summary>
-        public static IBrush InkOnDeckDim => new SolidColorBrush(Colors.InkOnDeck, Opacity.Dim);
+        /// <inheritdoc cref="Colors.Surface"/>
+        public static IBrush Surface { get; } = new SolidColorBrush(Colors.Surface);
 
-        /// <summary>Ink on the deck at the faintest legible opacity.</summary>
-        public static IBrush InkOnDeckFaint => new SolidColorBrush(Colors.InkOnDeck, Opacity.Faint);
+        /// <inheritdoc cref="Colors.Wash"/>
+        public static IBrush Wash { get; } = new SolidColorBrush(Colors.Wash);
 
-        /// <inheritdoc cref="Colors.Record"/>
-        public static IBrush Record => new SolidColorBrush(Colors.Record);
+        /// <inheritdoc cref="Colors.Card"/>
+        public static IBrush Card { get; } = new SolidColorBrush(Colors.Card);
 
-        /// <inheritdoc cref="Colors.MeterFace"/>
-        public static IBrush MeterFace => new SolidColorBrush(Colors.MeterFace);
+        /// <inheritdoc cref="Colors.OnBrand"/>
+        public static IBrush OnBrand { get; } = new SolidColorBrush(Colors.OnBrand);
 
-        /// <inheritdoc cref="Colors.MeterAmber"/>
-        public static IBrush MeterAmber => new SolidColorBrush(Colors.MeterAmber);
+        /// <summary>Transparent, for buttons that draw themselves.</summary>
+        public static IBrush None { get; } = Avalonia.Media.Brushes.Transparent;
 
-        /// <inheritdoc cref="Colors.Seam"/>
-        public static IBrush Seam => new SolidColorBrush(Colors.Seam);
+        /// <summary>The primary button: brand to brand-strong, 135°.</summary>
+        public static IBrush PrimaryGradient { get; } = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+            GradientStops = { new GradientStop(Colors.Brand, 0), new GradientStop(Colors.BrandStrong, 1) },
+        };
+
+        /// <summary>Brand-tinted focus ring.</summary>
+        public static IBrush FocusRing { get; } = new SolidColorBrush(Colors.Brand, Opacity.Ring);
+
+        /// <summary>Brand at badge-background strength.</summary>
+        public static IBrush BrandTint { get; } = new SolidColorBrush(Colors.Brand, Opacity.Tint);
     }
 
-    /// <summary>
-    /// The few opacities used for secondary ink, seams and grain. Named so no view carries
-    /// a bare <c>0.55</c>.
-    /// </summary>
+    /// <summary>Opacities used for tints, rings and washes.</summary>
     public static class Opacity
     {
-        /// <summary>Secondary text on a readout.</summary>
-        public const double Dim = 0.55;
+        /// <summary>Badge and hover tint of a hue.</summary>
+        public const double Tint = 0.08;
 
-        /// <summary>Tertiary text, placeholder copy.</summary>
-        public const double Faint = 0.38;
+        /// <summary>A hover border in the brand hue.</summary>
+        public const double Edge = 0.15;
 
-        /// <summary>A seam drawn on a lighter surface, so it reads as a line not a gap.</summary>
-        public const double Seam = 0.5;
+        /// <summary>The focus ring.</summary>
+        public const double Ring = 0.45;
 
-        /// <summary>Disabled rows.</summary>
+        /// <summary>The top wash bloom on the page background.</summary>
+        public const double WashTop = 0.07;
+
+        /// <summary>The bottom wash bloom on the page background.</summary>
+        public const double WashBottom = 0.05;
+
+        /// <summary>Glass card fill.</summary>
+        public const double Glass = 0.88;
+
+        /// <summary>Disabled controls and rows.</summary>
         public const double Disabled = 0.45;
 
-        /// <summary>The amber wash behind a lit VU face.</summary>
-        public const double MeterWash = 0.14;
+        /// <summary>Idle listening bars.</summary>
+        public const double BarsIdle = 0.35;
     }
 
     // ---- Type ----
 
     /// <summary>
-    /// A neutral grotesque, the way equipment was labelled.
+    /// Inter, bundled by Avalonia with every weight. One family for everything; numbers
+    /// are tabular via <see cref="Tabular"/>.
     /// </summary>
-    /// <remarks>
-    /// Bahnschrift ships with Windows 10 and 11 and is a DIN — the German industrial standard
-    /// face, which is literally what Braun and the German decks were labelled in. Helvetica is
-    /// the macOS equivalent and is not installed on Windows; Arial closes the gap where
-    /// Bahnschrift is missing. A humanist UI face has rounded terminals that fight the
-    /// silkscreen look, so Segoe is deliberately last.
-    /// </remarks>
     public static class Fonts
     {
-        /// <summary>The panel typeface.</summary>
-        public static FontFamily Grotesque { get; } =
-            new("Bahnschrift, Helvetica Neue, Helvetica, Arial, Segoe UI, sans-serif");
+        /// <summary>The one UI family, loaded from the bundled TTFs.</summary>
+        public static FontFamily Sans { get; } = new("fonts:Inter#Inter");
 
-        /// <summary>Readouts and timings. Monospaced so digits don't shift as they tick.</summary>
-        public static FontFamily Mono { get; } =
-            new("Cascadia Mono, Consolas, Menlo, SF Mono, monospace");
+        /// <summary>Tabular figures for anything that ticks or aligns.</summary>
+        public static FontFeatureCollection Tabular { get; } = [new FontFeature { Tag = "tnum" }];
 
-        /// <summary>Panel labels: small, uppercase, tightly tracked.</summary>
-        public const double Silkscreen = 9;
+        /// <summary>Badges and eyebrow labels. Uppercase, tracked.</summary>
+        public const double Badge = 10;
 
-        /// <summary>A larger silkscreen label, for section headers.</summary>
-        public const double SilkscreenLarge = 11;
+        /// <summary>Captions and metadata.</summary>
+        public const double Caption = 11;
 
-        /// <summary>The unit name on the caption strip.</summary>
-        public const double Nameplate = 13;
+        /// <summary>Secondary body, table cells, helper text.</summary>
+        public const double Small = 12.5;
 
-        /// <summary>Caption text.</summary>
-        public const double Caption = 10;
+        /// <summary>Body.</summary>
+        public const double Body = 14;
 
-        /// <summary>Secondary label text.</summary>
-        public const double Label = 11;
+        /// <summary>The transcript text — the thing you read most.</summary>
+        public const double Reading = 15;
 
-        /// <summary>Body text.</summary>
-        public const double Body = 13;
+        /// <summary>Section headings.</summary>
+        public const double Heading = 18;
 
-        /// <summary>Section titles.</summary>
-        public const double Title = 17;
+        /// <summary>The window title.</summary>
+        public const double Title = 22;
 
-        /// <summary>The big transport counter.</summary>
-        public const double CounterLarge = 26;
+        /// <summary>The live counter while recording.</summary>
+        public const double Counter = 28;
 
-        /// <summary>Letter spacing for silkscreen labels, in device-independent pixels.</summary>
-        public const double SilkscreenTracking = 1.1;
+        /// <summary>Tracking for badges and eyebrows, in device-independent pixels at badge size.</summary>
+        public const double BadgeTracking = 0.6;
 
-        /// <summary>Wider tracking for the nameplate, the way a model name is set.</summary>
-        public const double NameplateTracking = 2.4;
-
-        /// <summary>Printing on the VU scale — the smallest type in the app.</summary>
-        public const double MeterScale = 7;
+        /// <summary>Tracking for headings. Tight, as <c>.display</c> is.</summary>
+        public const double HeadingTracking = -0.4;
     }
 
     // ---- Geometry ----
 
-    /// <summary>A 4pt grid. Panels are laid out on it; nothing sits between steps.</summary>
+    /// <summary>A 4pt grid.</summary>
     public static class Space
     {
         /// <summary>2</summary>
@@ -272,6 +245,9 @@ public static class Tokens
 
         /// <summary>4</summary>
         public const double Tight = 4;
+
+        /// <summary>6</summary>
+        public const double Chip = 6;
 
         /// <summary>8</summary>
         public const double Snug = 8;
@@ -282,284 +258,205 @@ public static class Tokens
         /// <summary>16</summary>
         public const double Roomy = 16;
 
+        /// <summary>20</summary>
+        public const double Card = 20;
+
         /// <summary>24</summary>
         public const double Wide = 24;
 
         /// <summary>32</summary>
-        public const double Panel = 32;
+        public const double Section = 32;
+
+        /// <summary>40</summary>
+        public const double Page = 40;
     }
 
-    /// <summary>
-    /// Small by design. Equipment has hard edges; anything soft reads as software.
-    /// </summary>
+    /// <summary>The crispness scale: card 12, inner 10, control 8, pill 99.</summary>
     public static class Radius
     {
-        /// <summary>Seams and dividers — square.</summary>
-        public const double None = 0;
+        /// <summary>Chips, fields, badges with corners, small buttons.</summary>
+        public const double Control = 8;
 
-        /// <summary>Indicator chips, small lamps.</summary>
-        public const double Chip = 2;
+        /// <summary>Inner panels and nested boxes.</summary>
+        public const double Inner = 10;
 
-        /// <summary>Button caps and controls.</summary>
-        public const double Control = 3;
+        /// <summary>Cards.</summary>
+        public const double Card = 12;
 
-        /// <summary>Recessed wells and grouped panels.</summary>
-        public const double Panel = 5;
+        /// <summary>Pills and toggles.</summary>
+        public const double Pill = 99;
 
-        /// <summary>The window itself.</summary>
-        public const double Window = 8;
+        /// <summary>Listening bars.</summary>
+        public const double Bar = 3;
     }
 
-    /// <summary>Line weights. All 1 — a machined edge reads the same at any density.</summary>
+    /// <summary>Line weights.</summary>
     public static class Border
     {
-        /// <summary>A drawn hairline.</summary>
+        /// <summary>Card and field borders.</summary>
         public const double Hairline = 1;
 
-        /// <summary>The seam between two panels.</summary>
-        public const double Seam = 1;
-
-        /// <summary>Bevel thickness on raised controls.</summary>
-        public const double Bevel = 1;
+        /// <summary>Focus ring.</summary>
+        public const double Ring = 2;
     }
 
     /// <summary>
-    /// Depth is physical: a raised cap casts a short hard shadow, a well is cut into the
-    /// panel. No soft ambient glows.
+    /// Soft, layered, low-opacity. Cards sit at <see cref="Card"/> and lift on hover.
     /// </summary>
     public static class Shadow
     {
-        /// <summary>A button cap sitting proud of the panel.</summary>
-        public static BoxShadows Raised => Spec(0.35, blur: 2, offsetY: 1);
+        /// <summary>Floating panels, popups.</summary>
+        public static BoxShadows Soft => Layered((1, 2, 0.03), (4, 16, 0.04), (12, 32, 0.03));
 
-        /// <summary>A cap while pressed — nearly flush.</summary>
-        public static BoxShadows Pressed => Spec(0.22, blur: 1, offsetY: 0);
+        /// <summary>Standard card.</summary>
+        public static BoxShadows Card => Layered((1, 2, 0.03), (4, 12, 0.04), (12, 28, 0.04));
 
-        /// <summary>A grouped panel above the chassis.</summary>
-        public static BoxShadows Panel => Spec(0.25, blur: 6, offsetY: 2);
+        /// <summary>Hovered card, modal.</summary>
+        public static BoxShadows Lift => Layered((2, 8, 0.04), (8, 24, 0.06), (20, 48, 0.06));
 
-        /// <summary>A popup menu above the panel.</summary>
-        public static BoxShadows Popup => Spec(0.45, blur: 10, offsetY: 4);
+        /// <summary>The primary button's brand-tinted shadow.</summary>
+        public static BoxShadows Primary => new(
+            new BoxShadow { OffsetY = 2, Blur = 8, Color = Color.FromArgb((byte)(0.28 * 255), 0x3D, 0x47, 0x85) },
+            [new BoxShadow { OffsetY = 1, Blur = 2, Color = Color.FromArgb((byte)(0.16 * 255), 0x3D, 0x47, 0x85) }]);
 
-        /// <summary>The overlay readout against the desktop.</summary>
-        public static BoxShadows Overlay => Spec(0.40, blur: 16, offsetY: 6);
+        /// <summary>No shadow.</summary>
+        public static BoxShadows None => default;
 
-        private static BoxShadows Spec(double opacity, double blur, double offsetY) => new(new BoxShadow
+        private static BoxShadows Layered(params (double OffsetY, double Blur, double Opacity)[] layers)
         {
-            Color = Color.FromArgb((byte)(opacity * 255), 0, 0, 0),
-            Blur = blur,
-            OffsetY = offsetY,
-        });
-    }
+            var first = ToShadow(layers[0]);
+            var rest = layers.Skip(1).Select(ToShadow).ToArray();
+            return new BoxShadows(first, rest);
+        }
 
-    // ---- Material ----
-
-    /// <summary>
-    /// The physical detail that makes a panel read as a machined object: metal grain,
-    /// fasteners, ventilation, lamps, key travel, needle sweep.
-    /// </summary>
-    public static class Material
-    {
-        /// <summary>Opacity of the lighter striations in brushed metal.</summary>
-        public const double GrainLight = 0.055;
-
-        /// <summary>Opacity of the darker striations.</summary>
-        public const double GrainDark = 0.07;
-
-        /// <summary>Distance between striations.</summary>
-        public const double GrainPitch = 2;
-
-        /// <summary>Diameter of a panel screw head.</summary>
-        public const double ScrewSize = 9;
-
-        /// <summary>Inset of a screw from the panel corner.</summary>
-        public const double ScrewInset = 10;
-
-        /// <summary>A single vent slot.</summary>
-        public const double VentSlotWidth = 3;
-
-        /// <summary>Height of a vent slot.</summary>
-        public const double VentSlotHeight = 22;
-
-        /// <summary>Gap between vent slots.</summary>
-        public const double VentSlotGap = 4;
-
-        /// <summary>Corner radius of a vent slot.</summary>
-        public const double VentRadius = 1.5;
-
-        /// <summary>Indicator lamp diameter.</summary>
-        public const double LampSize = 7;
-
-        /// <summary>A smaller lamp, for list rows and status clusters.</summary>
-        public const double LampSizeSmall = 6;
-
-        /// <summary>A lit lamp's lens highlight — a specular dot, not a bloom.</summary>
-        public const double LampSpecular = 0.45;
-
-        /// <summary>How far an unlit lamp sits below the lit value.</summary>
-        public const double LampUnlitOpacity = 0.22;
-
-        /// <summary>Transport key height.</summary>
-        public const double KeyHeight = 34;
-
-        /// <summary>Minimum transport key width.</summary>
-        public const double KeyMinWidth = 52;
-
-        /// <summary>The record key is wider than the others, as on every deck.</summary>
-        public const double RecordKeyMinWidth = 96;
-
-        /// <summary>How far a key sinks when pressed.</summary>
-        public const double KeyTravel = 1.5;
-
-        /// <summary>Window caption keys — square, small, on the chassis.</summary>
-        public const double CaptionKeySize = 22;
-
-        /// <summary>Total sweep of the VU needle, in degrees, centred on vertical.</summary>
-        public const double NeedleSweepDegrees = 96;
-
-        /// <summary>Needle thickness.</summary>
-        public const double NeedleWidth = 1.5;
-
-        /// <summary>Where 0 VU sits along the scale, 0…1. The red zone begins here.</summary>
-        public const double MeterZeroPoint = 0.72;
-
-        /// <summary>The VU face on the front panel.</summary>
-        public const double MeterWidth = 236;
-
-        /// <summary>Height of the VU face on the front panel.</summary>
-        public const double MeterHeight = 92;
-
-        /// <summary>The VU face on the overlay readout.</summary>
-        public const double MeterWidthSmall = 120;
-
-        /// <summary>Height of the overlay VU face.</summary>
-        public const double MeterHeightSmall = 44;
-
-        /// <summary>Stroke width of a seven-segment bar.</summary>
-        public const double SegmentThickness = 3;
-
-        /// <summary>Gap between segments within a digit.</summary>
-        public const double SegmentGap = 1;
-
-        /// <summary>Unlit segments stay faintly visible, as on a real LCD.</summary>
-        public const double SegmentGhostOpacity = 0.12;
-
-        /// <summary>Height of one seven-segment digit.</summary>
-        public const double SegmentDigitHeight = 30;
-
-        /// <summary>Width of one seven-segment digit.</summary>
-        public const double SegmentDigitWidth = 17;
-
-        /// <summary>Horizontal advance between digits.</summary>
-        public const double SegmentDigitAdvance = 22;
-
-        /// <summary>Width reserved for a colon.</summary>
-        public const double SegmentColonAdvance = 9;
-
-        /// <summary>Slant of the digits, as horizontal offset per unit height.</summary>
-        public const double SegmentSlant = 0.08;
-
-        /// <summary>Width of one bar in the level trace.</summary>
-        public const double TraceBarWidth = 2;
-
-        /// <summary>Gap between trace bars.</summary>
-        public const double TraceBarGap = 1;
-
-        /// <summary>How many readings the trace remembers.</summary>
-        public const int TraceLength = 96;
-
-        /// <summary>Height of the level trace readout.</summary>
-        public const double TraceHeight = 22;
-
-        /// <summary>Height of the caption strip that replaces the OS title bar.</summary>
-        public const double CaptionHeight = 34;
-
-        /// <summary>Height of the menu row.</summary>
-        public const double MenuHeight = 26;
-
-        /// <summary>The overlay readout shown over other apps.</summary>
-        public const double OverlayWidth = 236;
-
-        /// <summary>Height of the overlay readout.</summary>
-        public const double OverlayHeight = 72;
-
-        /// <summary>Distance of the overlay from the bottom of the screen.</summary>
-        public const double OverlayBottomMargin = 64;
+        private static BoxShadow ToShadow((double OffsetY, double Blur, double Opacity) l) => new()
+        {
+            OffsetY = l.OffsetY,
+            Blur = l.Blur,
+            Color = Color.FromArgb((byte)(l.Opacity * 255), 0, 0, 0),
+        };
     }
 
     // ---- Layout ----
 
-    /// <summary>Window and dialog dimensions, so no view carries a bare <c>880</c>.</summary>
+    /// <summary>Window and control dimensions.</summary>
     public static class Layout
     {
         /// <summary>Initial main window width.</summary>
-        public const double MainWidth = 960;
+        public const double MainWidth = 880;
 
         /// <summary>Initial main window height.</summary>
-        public const double MainHeight = 700;
+        public const double MainHeight = 660;
 
-        /// <summary>Smallest main window that still lays out the front panel on one row.</summary>
-        public const double MainMinWidth = 820;
+        /// <summary>Smallest main window.</summary>
+        public const double MainMinWidth = 640;
 
         /// <summary>Smallest main window height.</summary>
-        public const double MainMinHeight = 560;
+        public const double MainMinHeight = 480;
 
         /// <summary>Settings dialog width.</summary>
-        public const double SettingsWidth = 600;
+        public const double SettingsWidth = 560;
 
-        /// <summary>Dictionary entry editor width.</summary>
-        public const double EditorWidth = 480;
+        /// <summary>Dictionary editor and About width.</summary>
+        public const double DialogWidth = 460;
 
-        /// <summary>Widest a paragraph of helper text is allowed to run.</summary>
-        public const double NoteMaxWidth = 420;
+        /// <summary>Content column max width, so text lines stay readable on a wide window.</summary>
+        public const double ContentMaxWidth = 760;
 
-        /// <summary>Width of the kind tag on a dictionary row.</summary>
-        public const double KindTagWidth = 34;
+        /// <summary>The caption strip that replaces the OS title bar.</summary>
+        public const double CaptionHeight = 44;
 
-        /// <summary>Height of the model download gauge.</summary>
-        public const double GaugeHeight = 10;
+        /// <summary>Caption glyph buttons.</summary>
+        public const double CaptionButton = 28;
+
+        /// <summary>Standard button height.</summary>
+        public const double ButtonHeight = 36;
+
+        /// <summary>Compact button height, for row actions.</summary>
+        public const double ButtonHeightSmall = 28;
+
+        /// <summary>Text field height.</summary>
+        public const double FieldHeight = 38;
+
+        /// <summary>Toggle switch width.</summary>
+        public const double SwitchWidth = 38;
+
+        /// <summary>Toggle switch height.</summary>
+        public const double SwitchHeight = 22;
+
+        /// <summary>Status dot diameter.</summary>
+        public const double Dot = 8;
+
+        /// <summary>Listening bars: count on the main card.</summary>
+        public const int BarsCount = 28;
+
+        /// <summary>Listening bars: count on the overlay.</summary>
+        public const int BarsCountSmall = 12;
+
+        /// <summary>Listening bars: width of one bar.</summary>
+        public const double BarWidth = 4;
+
+        /// <summary>Listening bars: gap.</summary>
+        public const double BarGap = 4;
+
+        /// <summary>Listening bars: height of the field on the main card.</summary>
+        public const double BarsHeight = 56;
+
+        /// <summary>Listening bars: height on the overlay.</summary>
+        public const double BarsHeightSmall = 26;
+
+        /// <summary>Listening bars: minimum bar height, as a fraction of the field.</summary>
+        public const double BarMinFraction = 0.12;
+
+        /// <summary>The overlay pill.</summary>
+        public const double OverlayWidth = 260;
+
+        /// <summary>Overlay height.</summary>
+        public const double OverlayHeight = 56;
+
+        /// <summary>Distance of the overlay from the bottom of the screen.</summary>
+        public const double OverlayBottomMargin = 56;
+
+        /// <summary>Gauge height for the model download.</summary>
+        public const double GaugeHeight = 6;
+
+        /// <summary>Widest a helper paragraph runs.</summary>
+        public const double NoteMaxWidth = 440;
+
+        /// <summary>Width of the logo tile in the header.</summary>
+        public const double LogoTile = 28;
     }
 
     // ---- Motion ----
 
-    /// <summary>Mechanical, not bouncy. A key travels and stops; it doesn't spring.</summary>
+    /// <summary>Quick and quiet. Buttons press with a scale, cards lift, bars ease.</summary>
     public static class Motion
     {
-        /// <summary>Key travel down. Fast enough to feel like contact.</summary>
-        public static TimeSpan Press { get; } = TimeSpan.FromMilliseconds(60);
+        /// <summary>Hover and press transitions.</summary>
+        public static TimeSpan Quick { get; } = TimeSpan.FromMilliseconds(150);
 
-        /// <summary>Key travel up.</summary>
-        public static TimeSpan Release { get; } = TimeSpan.FromMilliseconds(120);
+        /// <summary>Card lift.</summary>
+        public static TimeSpan Lift { get; } = TimeSpan.FromMilliseconds(220);
 
-        /// <summary>Panel and view changes.</summary>
-        public static TimeSpan Panel { get; } = TimeSpan.FromMilliseconds(180);
-
-        /// <summary>The record lamp coming on — instant, like a filament.</summary>
-        public static TimeSpan Lamp { get; } = TimeSpan.FromMilliseconds(80);
-
-        /// <summary>How often the panel polls the engine for level and state.</summary>
+        /// <summary>How often the panel polls the engine.</summary>
         public static TimeSpan PanelPoll { get; } = TimeSpan.FromMilliseconds(50);
 
-        /// <summary>One frame of needle physics.</summary>
+        /// <summary>One frame of bar animation.</summary>
         public static TimeSpan Frame { get; } = TimeSpan.FromMilliseconds(16);
 
-        /// <summary>How long "COPIED" stays on a key before it reads "COPY" again.</summary>
+        /// <summary>How long "Copied" stays on a button.</summary>
         public static TimeSpan Confirmation { get; } = TimeSpan.FromMilliseconds(1400);
 
-        /// <summary>
-        /// VU ballistics: seconds to reach a step going up.
-        /// </summary>
-        /// <remarks>
-        /// A real VU movement reaches 99% of a step in ~300 ms and overshoots slightly. That
-        /// lag <i>is</i> the instrument's character — a needle that tracks the signal exactly
-        /// reads as a progress bar with a stick on it.
-        /// </remarks>
-        public const double NeedleAttackSeconds = 0.30;
+        /// <summary>Button press scale, as the brand's global rule.</summary>
+        public const double PressScale = 0.93;
 
-        /// <summary>Seconds for the needle to fall back.</summary>
-        public const double NeedleReleaseSeconds = 0.42;
+        /// <summary>How fast a bar rises toward the level, per frame.</summary>
+        public const double BarAttack = 0.45;
 
-        /// <summary>Peak overshoot as a fraction of the step, before settling.</summary>
-        public const double NeedleOvershoot = 0.06;
+        /// <summary>How fast a bar falls, per frame.</summary>
+        public const double BarRelease = 0.12;
+
+        /// <summary>Idle bars breathe at this fraction of the field.</summary>
+        public const double BarIdleBreath = 0.06;
     }
 }

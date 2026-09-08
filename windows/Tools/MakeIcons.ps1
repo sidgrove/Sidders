@@ -1,16 +1,16 @@
 <#
 .SYNOPSIS
-  Renders the app and tray icons from the design tokens' palette.
+  Renders the app and tray icons in the Sidgrove identity.
 
 .DESCRIPTION
-  Draws a cassette motif — a black chassis, a silver panel, two hub windows and the record
-  lamp — at every size Windows asks for, and packs them into .ico containers. Run it once
-  after changing the design; the outputs are committed.
+  The Sidgrove mark — a thick rounded 45° stroke and a dot, "/." — in white on a
+  brand-blue rounded tile, redrawn from the site's favicon.svg geometry. The recording
+  variant swaps the dot for the muted rose so the tray shows state at a glance.
 
   Output:
     src/Murmur.App/Assets/app.ico        16 · 24 · 32 · 48 · 64 · 128 · 256
     src/Murmur.App/Assets/tray.ico       16 · 24 · 32   (idle)
-    src/Murmur.App/Assets/tray-rec.ico   16 · 24 · 32   (record lamp lit)
+    src/Murmur.App/Assets/tray-rec.ico   16 · 24 · 32   (recording)
 #>
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -19,77 +19,61 @@ $root   = Split-Path $PSScriptRoot -Parent
 $assets = Join-Path $root 'src\Murmur.App\Assets'
 New-Item -ItemType Directory -Force $assets | Out-Null
 
-# Tokens.Colors, black face — the icon reads on light and dark taskbars alike.
-$chassis   = [System.Drawing.Color]::FromArgb(0x12, 0x11, 0x10)
-$panel     = [System.Drawing.Color]::FromArgb(0xB8, 0xB4, 0xAD)
-$highlight = [System.Drawing.Color]::FromArgb(0xC9, 0xC5, 0xBE)
-$deck      = [System.Drawing.Color]::FromArgb(0x38, 0x35, 0x2F)
-$seam      = [System.Drawing.Color]::FromArgb(0x6B, 0x68, 0x62)
-$record    = [System.Drawing.Color]::FromArgb(0xC8, 0x34, 0x2A)
-$recordOff = [System.Drawing.Color]::FromArgb(0x4A, 0x27, 0x24)
-$ink       = [System.Drawing.Color]::FromArgb(0x1C, 0x1A, 0x17)
+$brand       = [System.Drawing.Color]::FromArgb(0x68, 0x74, 0xB4)
+$brandStrong = [System.Drawing.Color]::FromArgb(0x3D, 0x47, 0x85)
+$white       = [System.Drawing.Color]::White
+$rose        = [System.Drawing.Color]::FromArgb(0xFF, 0x9F, 0xBC)   # rose-mid on blue reads as "live"
 
-function Render([int]$size, [bool]$lit) {
+function Render([int]$size, [bool]$recording) {
     $bmp = New-Object System.Drawing.Bitmap $size, $size
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = 'AntiAlias'
     $g.Clear([System.Drawing.Color]::Transparent)
 
-    $u = $size / 32.0            # one unit at 32 px
-
-    # Chassis: rounded square.
-    $radius = [Math]::Max(1, 4 * $u)
+    # Tile: brand gradient, radius ~22% like the app's 10px-on-44px logo box.
+    $radius = [Math]::Max(2, $size * 0.22)
     $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $r = New-Object System.Drawing.RectangleF 0, 0, $size, $size
     $d = $radius * 2
-    $path.AddArc($r.X, $r.Y, $d, $d, 180, 90)
-    $path.AddArc($r.Right - $d, $r.Y, $d, $d, 270, 90)
-    $path.AddArc($r.Right - $d, $r.Bottom - $d, $d, $d, 0, 90)
-    $path.AddArc($r.X, $r.Bottom - $d, $d, $d, 90, 90)
+    $path.AddArc(0, 0, $d, $d, 180, 90)
+    $path.AddArc($size - $d, 0, $d, $d, 270, 90)
+    $path.AddArc($size - $d, $size - $d, $d, $d, 0, 90)
+    $path.AddArc(0, $size - $d, $d, $d, 90, 90)
     $path.CloseFigure()
-    $g.FillPath((New-Object System.Drawing.SolidBrush $chassis), $path)
+    $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Point 0, 0), (New-Object System.Drawing.Point $size, $size), $brand, $brandStrong
+    $g.FillPath($brush, $path)
 
-    # Silver panel inset.
-    $inset = 3 * $u
-    $pr = New-Object System.Drawing.RectangleF $inset, (7 * $u), ($size - 2 * $inset), ($size - 10 * $u)
-    $g.FillRectangle((New-Object System.Drawing.SolidBrush $panel), $pr)
-    $g.DrawLine((New-Object System.Drawing.Pen $highlight, ([Math]::Max(1, $u))), $pr.X, $pr.Y, $pr.Right, $pr.Y)
-    $g.DrawRectangle((New-Object System.Drawing.Pen $seam, ([Math]::Max(1, $u * 0.8))), $pr.X, $pr.Y, $pr.Width, $pr.Height)
+    # The mark, in the favicon's 100-unit space scaled to fill ~76% of the tile.
+    $u = $size / 100.0
+    $g.TranslateTransform(50 * $u, 50 * $u)
+    $g.ScaleTransform(0.76, 0.76)
+    $g.TranslateTransform(-48.1 * $u, -49.15 * $u)
 
-    # Deck window with two hubs.
-    $wr = New-Object System.Drawing.RectangleF ($inset + 3 * $u), (10 * $u), ($size - 2 * $inset - 6 * $u), (11 * $u)
-    $g.FillRectangle((New-Object System.Drawing.SolidBrush $deck), $wr)
-    $hub = 5 * $u
-    $hy = $wr.Y + ($wr.Height - $hub) / 2
-    foreach ($hx in @(($wr.X + 2.5 * $u), ($wr.Right - 2.5 * $u - $hub))) {
-        $g.FillEllipse((New-Object System.Drawing.SolidBrush $panel), $hx, $hy, $hub, $hub)
-        $g.FillEllipse((New-Object System.Drawing.SolidBrush $deck), ($hx + 1.6 * $u), ($hy + 1.6 * $u), ($hub - 3.2 * $u), ($hub - 3.2 * $u))
-    }
+    # Diagonal: a rounded rect 86.4 x 19 centred at (39.5, 49.15), rotated -44.6°.
+    $state = $g.Save()
+    $g.TranslateTransform(39.5 * $u, 49.15 * $u)
+    $g.RotateTransform(-44.6)
+    $rw = 86.4 * $u; $rh = 19 * $u; $rr = 6.5 * $u
+    $rp = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $rp.AddArc(-$rw/2, -$rh/2, 2*$rr, 2*$rr, 180, 90)
+    $rp.AddArc($rw/2 - 2*$rr, -$rh/2, 2*$rr, 2*$rr, 270, 90)
+    $rp.AddArc($rw/2 - 2*$rr, $rh/2 - 2*$rr, 2*$rr, 2*$rr, 0, 90)
+    $rp.AddArc(-$rw/2, $rh/2 - 2*$rr, 2*$rr, 2*$rr, 90, 90)
+    $rp.CloseFigure()
+    $g.FillPath((New-Object System.Drawing.SolidBrush $white), $rp)
+    $g.Restore($state)
 
-    # The record lamp, top-left on the chassis.
-    $lamp = 4 * $u
-    $lc = if ($lit) { $record } else { $recordOff }
-    $g.FillEllipse((New-Object System.Drawing.SolidBrush $lc), (3.5 * $u), (2 * $u), $lamp, $lamp)
-    if ($lit -and $size -ge 24) {
-        $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(115, 255, 255, 255))), (4.3 * $u), (2.7 * $u), ($lamp * 0.3), ($lamp * 0.3))
-    }
-
-    # Transport keys along the bottom of the panel.
-    if ($size -ge 24) {
-        $ky = $pr.Bottom - 4.5 * $u
-        for ($i = 0; $i -lt 3; $i++) {
-            $kx = $wr.X + $i * 4.4 * $u
-            $g.FillRectangle((New-Object System.Drawing.SolidBrush $ink), $kx, $ky, (3.4 * $u), (2.4 * $u))
-        }
-    }
+    # The dot at (82.3, 72.3) r 11.8 — rose while recording.
+    $dot = if ($recording) { $rose } else { $white }
+    $r = 11.8 * $u
+    $g.FillEllipse((New-Object System.Drawing.SolidBrush $dot), (82.3 * $u - $r), (72.3 * $u - $r), 2*$r, 2*$r)
 
     $g.Dispose()
     return $bmp
 }
 
-function Write-Ico([string]$path, [int[]]$sizes, [bool]$lit) {
+function Write-Ico([string]$path, [int[]]$sizes, [bool]$recording) {
     $images = foreach ($s in $sizes) {
-        $bmp = Render $s $lit
+        $bmp = Render $s $recording
         $ms = New-Object System.IO.MemoryStream
         $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
         $bmp.Dispose()
