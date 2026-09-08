@@ -32,6 +32,9 @@ public sealed class DictationEngineTests
         hotkey.Press();
         for (var i = 0; i < 2000 && engine.State != DictationState.Recording; i++) await Task.Yield();
         for (var i = 0; i < 20000 && engine.Level == 0; i++) await Task.Yield();
+        // Then let the fake deliver everything it has: Level drops back to 0 once its
+        // buffer is exhausted. Releasing on the first chunk would be a 20 ms tap.
+        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
 
         hotkey.Release();
         for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
@@ -85,7 +88,7 @@ public sealed class DictationEngineTests
         var hotkey = new FakeHotkeySource();
         var injector = new RecordingTextInjector();
         await using var engine = Build(
-            FakeAudioCapture.Tone(0.2), hotkey, new FakeTranscriber("hello"), injector);
+            FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("hello"), injector);
 
         hotkey.Release();
         for (var i = 0; i < 500; i++) await Task.Yield();
@@ -101,7 +104,7 @@ public sealed class DictationEngineTests
         var transcriber = new FakeTranscriber("anything");
 
         await using var engine = Build(
-            FakeAudioCapture.Tone(0.4), hotkey, transcriber, new RecordingTextInjector(),
+            FakeAudioCapture.Tone(0.6), hotkey, transcriber, new RecordingTextInjector(),
             DictionaryEntry.Term("Anthropic"),
             DictionaryEntry.Correction("cloud code", "Claude Code"));
 
@@ -118,7 +121,7 @@ public sealed class DictationEngineTests
     {
         var hotkey = new FakeHotkeySource();
         await using var engine = Build(
-            FakeAudioCapture.Tone(0.3), hotkey, new FakeTranscriber("done"), new RecordingTextInjector());
+            FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("done"), new RecordingTextInjector());
 
         engine.State.ShouldBe(DictationState.Idle);
         await DictateAsync(hotkey, engine);

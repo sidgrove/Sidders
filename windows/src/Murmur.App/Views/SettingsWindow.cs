@@ -28,7 +28,8 @@ public sealed class SettingsWindow : UnitWindow
     private static readonly (int Key, string Label, string? Warning)[] Keys =
     [
         (0xA3, "RIGHT CTRL", null),
-        (0xA1, "RIGHT SHIFT", null),
+        (0xA1, "RIGHT SHIFT", "Right Shift also fires every time you type a capital letter with your "
+                            + "right hand. Taps under half a second are ignored, but Right Ctrl is quieter."),
         (0x14, "CAPS LOCK", null),
         (0x7C, "F13", null),
         (0xA5, "RIGHT ALT", "Right Alt is AltGr on many European layouts — binding it here "

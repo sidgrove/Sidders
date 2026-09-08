@@ -47,7 +47,7 @@ public sealed class FaultTests
     public async Task A_blocked_microphone_is_reported_in_words_rather_than_as_empty_text()
     {
         var hotkey = new FakeHotkeySource();
-        var capture = FakeAudioCapture.Silence(0.5) ;
+        var capture = FakeAudioCapture.Silence(0.8);
         capture.LooksLikeBlockedMicrophone = true;
         var injector = new RecordingTextInjector();
         var faults = new List<string>();
@@ -57,6 +57,7 @@ public sealed class FaultTests
 
         hotkey.Press();
         for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
+        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
         hotkey.Release();
         await SettleAsync(engine);
 
@@ -72,11 +73,12 @@ public sealed class FaultTests
         var faults = new List<string>();
 
         await using var engine = new DictationEngine(
-            FakeAudioCapture.Tone(0.3), hotkey, new NeverReadyTranscriber(), injector, () => []);
+            FakeAudioCapture.Tone(0.6), hotkey, new NeverReadyTranscriber(), injector, () => []);
         engine.Faulted += (_, m) => faults.Add(m);
 
         hotkey.Press();
         for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
+        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
         hotkey.Release();
         await SettleAsync(engine);
 
@@ -92,11 +94,12 @@ public sealed class FaultTests
         var transcriber = new FakeTranscriber("loaded fine");
         var injector = new RecordingTextInjector();
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.3), hotkey, transcriber, injector, () => []);
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, transcriber, injector, () => []);
         transcriber.IsReady.ShouldBeFalse();
 
         hotkey.Press();
         for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
+        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
         hotkey.Release();
         await SettleAsync(engine);
 
@@ -111,7 +114,7 @@ public sealed class FaultTests
         var injector = new RecordingTextInjector();
         DictationResult? completed = null;
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.3), hotkey, new FakeTranscriber("kept"), injector, () => [])
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("kept"), injector, () => [])
         {
             InjectText = false,
         };
@@ -119,6 +122,7 @@ public sealed class FaultTests
 
         hotkey.Press();
         for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
+        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
         hotkey.Release();
         await SettleAsync(engine);
 
@@ -206,5 +210,43 @@ public sealed class ReloadableTranscriberTests
         await using var transcriber = new ReloadableTranscriber(() => null, _ => new FakeTranscriber("never"));
         var text = await transcriber.TranscribeAsync(new float[100], [], CancellationToken.None);
         text.ShouldBe(string.Empty);
+    }
+}
+
+/// <summary>Taps and silence never reach the model — seen on hardware as typed "Mm-hmm."</summary>
+public sealed class TapGuardTests
+{
+    private static async Task RunAsync(FakeAudioCapture capture, FakeTranscriber transcriber, RecordingTextInjector injector)
+    {
+        var hotkey = new FakeHotkeySource();
+        await using var engine = new DictationEngine(capture, hotkey, transcriber, injector, () => []);
+        hotkey.Press();
+        for (var i = 0; i < 20000 && engine.State == DictationState.Recording && !capture.IsCapturing; i++) await Task.Yield();
+        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
+        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        hotkey.Release();
+        for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
+    }
+
+    [Fact]
+    public async Task A_key_tap_is_not_transcribed()
+    {
+        var transcriber = new FakeTranscriber("Mm-hmm.");
+        var injector = new RecordingTextInjector();
+        await RunAsync(FakeAudioCapture.Tone(0.2), transcriber, injector);
+
+        transcriber.SegmentLengths.ShouldBeEmpty();
+        injector.Injected.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Long_silence_is_not_transcribed()
+    {
+        var transcriber = new FakeTranscriber("Mm-hmm.");
+        var injector = new RecordingTextInjector();
+        await RunAsync(FakeAudioCapture.Silence(2.0), transcriber, injector);
+
+        transcriber.SegmentLengths.ShouldBeEmpty();
+        injector.Injected.ShouldBeEmpty();
     }
 }

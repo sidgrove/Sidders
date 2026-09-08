@@ -285,9 +285,38 @@ public sealed class DictationEngine : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Recordings shorter than this are dropped without transcribing.
+    /// </summary>
+    /// <remarks>
+    /// Observed on real hardware: a brief tap of the key — often a Shift pressed for a
+    /// capital letter — yields 30 to 400 ms of room tone, and Parakeet hallucinates
+    /// "Mm-hmm." onto it, which then gets typed. No word fits in less than this.
+    /// </remarks>
+    public static readonly TimeSpan MinimumUtterance = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// Recordings whose overall level is below this are dropped as silence, whatever their
+    /// length. Speech into any working microphone measures well above it.
+    /// </summary>
+    public const float SilenceFloor = 0.002f;
+
     private async Task ProcessAsync(List<float>? samples)
     {
         if (samples is null || samples.Count == 0) return;
+
+        var seconds = (double)samples.Count / AudioChunk.SampleRate;
+        if (seconds < MinimumUtterance.TotalSeconds)
+        {
+            Log.Info($"ignored a {seconds * 1000:0} ms tap of the key");
+            return;
+        }
+
+        if (new AudioChunk(samples.ToArray()).Rms() < SilenceFloor && !_capture.LooksLikeBlockedMicrophone)
+        {
+            Log.Info($"ignored {seconds:0.0}s of silence");
+            return;
+        }
 
         if (_capture.LooksLikeBlockedMicrophone)
         {
