@@ -144,13 +144,124 @@ public sealed class SettingsWindow : UnitWindow
                     {
                         _keyRow,
                         _keyWarning,
-                        Note("Hold this key anywhere to dictate. The key is passed through to the "
-                           + "focused app rather than swallowed, so it never gets stuck down."),
+                        BuildModeRow(),
+                        Note("The key is passed through to the focused app rather than swallowed, so it "
+                           + "never gets stuck down. Tap mode avoids the Windows Filter Keys prompt, which "
+                           + "appears when Right Shift is held for eight seconds."),
                     },
                 }),
                 Section("MICROPHONE", BuildMicrophoneSection()),
                 Section("MODEL", BuildModelSection()),
+                Section("AI CLEAN-UP", BuildAiSection()),
                 Section("BEHAVIOUR", behaviour),
+            },
+        };
+    }
+
+    /// <summary>Hold-to-talk versus tap-to-toggle, as two latching keys.</summary>
+    private StackPanel BuildModeRow()
+    {
+        var hold = new TransportKey { Content = "HOLD TO TALK", EngagedColor = Tokens.Colors.Ink };
+        var tap = new TransportKey { Content = "TAP TO START · TAP TO STOP", EngagedColor = Tokens.Colors.Ink };
+
+        void Select(bool toggle)
+        {
+            hold.IsEngaged = !toggle;
+            tap.IsEngaged = toggle;
+            if (_settings.Data.TapToToggle != toggle) Save(_settings.Data with { TapToToggle = toggle });
+        }
+
+        hold.Click += (_, _) => Select(false);
+        tap.Click += (_, _) => Select(true);
+        Select(_settings.Data.TapToToggle);
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = Tokens.Space.Snug,
+            Margin = new Thickness(0, Tokens.Space.Tight, 0, 0),
+            Children = { hold, tap },
+        };
+    }
+
+    /// <summary>The generative tier: a toggle, the key, the model, and a live test.</summary>
+    private StackPanel BuildAiSection()
+    {
+        var key = new TextBox
+        {
+            Text = _settings.Data.GeminiApiKey ?? string.Empty,
+            Watermark = "Gemini API key (or set GEMINI_API_KEY)",
+            PasswordChar = '•',
+            FontFamily = Tokens.Fonts.Mono,
+            FontSize = Tokens.Fonts.Body,
+            Foreground = Tokens.Brushes.InkOnDeck,
+            Background = Tokens.Brushes.Deck,
+            BorderBrush = Tokens.Brushes.Seam,
+            BorderThickness = new Thickness(Tokens.Border.Hairline),
+            CornerRadius = new CornerRadius(Tokens.Radius.Chip),
+            Padding = new Thickness(Tokens.Space.Snug),
+        };
+        key.LostFocus += (_, _) =>
+        {
+            var value = string.IsNullOrWhiteSpace(key.Text) ? null : key.Text.Trim();
+            if (_settings.Data.GeminiApiKey != value) Save(_settings.Data with { GeminiApiKey = value });
+        };
+
+        var model = new TextBox
+        {
+            Text = _settings.Data.GeminiModel ?? GeminiCleaner.DefaultModel,
+            Watermark = GeminiCleaner.DefaultModel,
+            FontFamily = Tokens.Fonts.Mono,
+            FontSize = Tokens.Fonts.Body,
+            Foreground = Tokens.Brushes.InkOnDeck,
+            Background = Tokens.Brushes.Deck,
+            BorderBrush = Tokens.Brushes.Seam,
+            BorderThickness = new Thickness(Tokens.Border.Hairline),
+            CornerRadius = new CornerRadius(Tokens.Radius.Chip),
+            Padding = new Thickness(Tokens.Space.Snug),
+        };
+        model.LostFocus += (_, _) =>
+        {
+            var value = string.IsNullOrWhiteSpace(model.Text) || model.Text.Trim() == GeminiCleaner.DefaultModel ? null : model.Text.Trim();
+            if (_settings.Data.GeminiModel != value) Save(_settings.Data with { GeminiModel = value });
+        };
+
+        var result = Note(string.Empty);
+        var test = new TransportKey { Content = "TEST" };
+        test.Click += async (_, _) =>
+        {
+            const string sample = "um so can you uh send me the the Q2 numbers by friday scratch that by thursday";
+            test.IsEnabled = false;
+            result.Text = "Sending a sample…";
+            try
+            {
+                using var cleaner = new GeminiCleaner(() => _settings.Data.GeminiApiKey, _settings.Data.GeminiModel);
+                var cleaned = await cleaner.CleanAsync(sample, CancellationToken.None).ConfigureAwait(true);
+                result.Text = cleaned is null
+                    ? $"Failed: {cleaner.LastError ?? "no reply"}"
+                    : $"“{sample}”  →  “{cleaned}”";
+            }
+            finally
+            {
+                test.IsEnabled = true;
+            }
+        };
+
+        return new StackPanel
+        {
+            Spacing = Tokens.Space.Snug,
+            Children =
+            {
+                Toggle("Clean up transcripts with Gemini before typing", _settings.Data.AiCleanup,
+                    v => Save(_settings.Data with { AiCleanup = v })),
+                Note("Removes fillers and false starts, applies “scratch that”, “new line” and "
+                   + "“bullet points”, and fixes punctuation. Your words leave this machine for "
+                   + "Google's API; roughly a twentieth of a penny per dictation on Flash. If the API "
+                   + "does not answer within eight seconds the raw transcript is typed instead."),
+                Panels.Labelled("API KEY", key),
+                Panels.Labelled("MODEL", model),
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = Tokens.Space.Snug, Children = { test } },
+                result,
             },
         };
     }

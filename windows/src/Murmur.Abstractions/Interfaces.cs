@@ -154,6 +154,23 @@ public interface IWindowTweaks
 }
 
 /// <summary>
+/// Rewrites a transcript into the text the speaker meant to type.
+/// </summary>
+/// <remarks>
+/// The optional generative tier: fillers out, spoken corrections applied, punctuation and
+/// case fixed, meaning untouched. The raw path never depends on it — a cleaner that fails
+/// returns null and the local text is typed instead.
+/// </remarks>
+public interface ITranscriptCleaner
+{
+    /// <summary>A short name for the history and the log, e.g. "gemini-2.5-flash".</summary>
+    string Name { get; }
+
+    /// <summary>Cleans <paramref name="text"/>, or returns null if it could not.</summary>
+    Task<string?> CleanAsync(string text, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Wall-clock time, behind an interface so timing logic is testable.
 /// </summary>
 /// <remarks>

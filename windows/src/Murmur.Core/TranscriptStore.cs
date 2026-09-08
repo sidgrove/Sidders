@@ -25,6 +25,9 @@ public sealed record TranscriptRecord
 
     /// <summary>Corrections that fired, if any.</summary>
     public IReadOnlyList<AppliedCorrection>? Corrections { get; init; }
+
+    /// <summary>The model that cleaned the text, or null if the raw transcript was typed.</summary>
+    public string? CleanedBy { get; init; }
 }
 
 /// <summary>

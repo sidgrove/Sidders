@@ -108,12 +108,23 @@ public sealed class Composition : IAsyncDisposable
             {
                 InjectText = settings.Data.InjectText,
                 DropSingleSentenceFullStop = settings.Data.DropSingleSentenceFullStop,
+                TapToToggle = settings.Data.TapToToggle,
+                AiCleanup = settings.Data.AiCleanup,
+                // Key and model are read per call, so pasting a key into Settings works at once.
+                Cleaner = new GeminiCleaner(() => settings.Data.GeminiApiKey, settings.Data.GeminiModel),
             };
 
             settings.Changed += (_, _) =>
             {
                 engine.InjectText = settings.Data.InjectText;
                 engine.DropSingleSentenceFullStop = settings.Data.DropSingleSentenceFullStop;
+                engine.TapToToggle = settings.Data.TapToToggle;
+                engine.AiCleanup = settings.Data.AiCleanup;
+                if (engine.Cleaner?.Name != (string.IsNullOrWhiteSpace(settings.Data.GeminiModel) ? GeminiCleaner.DefaultModel : settings.Data.GeminiModel.Trim()))
+                {
+                    (engine.Cleaner as IDisposable)?.Dispose();
+                    engine.Cleaner = new GeminiCleaner(() => settings.Data.GeminiApiKey, settings.Data.GeminiModel);
+                }
             };
 
             engine.Completed += (_, result) =>
@@ -127,6 +138,7 @@ public sealed class Composition : IAsyncDisposable
                     ProcessingSeconds = result.ProcessingTime.TotalSeconds,
                     Text = result.Text,
                     Corrections = result.Corrections.Count > 0 ? result.Corrections : null,
+                    CleanedBy = result.CleanedBy,
                 });
             };
         }

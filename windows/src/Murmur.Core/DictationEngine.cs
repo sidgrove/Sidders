@@ -22,7 +22,8 @@ public sealed record DictationResult(
     TimeSpan AudioDuration,
     TimeSpan ProcessingTime,
     string Text,
-    IReadOnlyList<AppliedCorrection> Corrections);
+    IReadOnlyList<AppliedCorrection> Corrections,
+    string? CleanedBy = null);
 
 /// <summary>
 /// The whole dictation flow: hotkey down, capture, hotkey up, transcribe, correct, inject.
@@ -86,6 +87,17 @@ public sealed class DictationEngine : IAsyncDisposable
     /// <summary>Whether a lone sentence loses its trailing full stop before typing.</summary>
     public bool DropSingleSentenceFullStop { get; set; } = true;
 
+    /// <summary>
+    /// Tap to start, tap to stop, instead of hold. The release event is ignored.
+    /// </summary>
+    public bool TapToToggle { get; set; }
+
+    /// <summary>The generative clean-up, or null when none is configured.</summary>
+    public ITranscriptCleaner? Cleaner { get; set; }
+
+    /// <summary>Whether <see cref="Cleaner"/> is used. Off means the raw path, always.</summary>
+    public bool AiCleanup { get; set; }
+
     /// <summary>Raised when a dictation completes and produced text.</summary>
     public event EventHandler<DictationResult>? Completed;
 
@@ -131,7 +143,7 @@ public sealed class DictationEngine : IAsyncDisposable
         IsHotkeyArmed = _hotkey.Start();
         Log.Info(IsHotkeyArmed ? "hotkey armed" : "hotkey could NOT be installed");
 
-        if (!IsHotkeyArmed) Fault("The push-to-talk key could not be hooked. Try restarting Murmur.");
+        if (!IsHotkeyArmed) Fault("The push-to-talk key could not be hooked. Try restarting Sidders.");
         return IsHotkeyArmed;
     }
 
@@ -175,9 +187,16 @@ public sealed class DictationEngine : IAsyncDisposable
         else if (State == DictationState.Recording) _ = EndAsync();
     }
 
-    private void OnPressed(object? sender, EventArgs e) => _ = BeginAsync();
+    private void OnPressed(object? sender, EventArgs e)
+    {
+        if (TapToToggle) TogglePushToTalk();
+        else _ = BeginAsync();
+    }
 
-    private void OnReleased(object? sender, EventArgs e) => _ = EndAsync();
+    private void OnReleased(object? sender, EventArgs e)
+    {
+        if (!TapToToggle) _ = EndAsync();
+    }
 
     private async Task BeginAsync()
     {
@@ -367,18 +386,40 @@ public sealed class DictationEngine : IAsyncDisposable
         // right word; this is the pass that guarantees it.
         var (dictionaryText, applied) = new DictionaryCorrector(entries).Apply(raw);
 
-        // Polish runs after the dictionary so a correction that ends a sentence is
-        // treated the same as one the engine produced itself.
-        var corrected = TranscriptPolish.Apply(dictionaryText, DropSingleSentenceFullStop);
+        // The generative tier sits between the dictionary and the polish: names arrive
+        // already corrected, and the single-sentence rule still applies to what comes back.
+        // If it fails for any reason the local text is used — a dictation is never lost to
+        // the cloud being down.
+        string? cleanedBy = null;
+        var candidate = dictionaryText;
+        if (AiCleanup && Cleaner is { } cleaner)
+        {
+            var cleaned = await cleaner.CleanAsync(dictionaryText, CancellationToken.None).ConfigureAwait(false);
+            if (cleaned is not null)
+            {
+                candidate = cleaned;
+                cleanedBy = cleaner.Name;
+            }
+            else
+            {
+                Log.Warn($"AI clean-up ({cleaner.Name}) returned nothing; typed the raw transcript");
+                Fault($"AI clean-up did not respond, so the raw transcript was typed. Check the key and connection in Settings.");
+            }
+        }
+
+        // Polish runs last so a correction or a clean-up that ends a sentence is treated
+        // the same as one the engine produced itself.
+        var corrected = TranscriptPolish.Apply(candidate, DropSingleSentenceFullStop);
 
         var result = new DictationResult(
             At: releasedAt,
             AudioDuration: TimeSpan.FromSeconds((double)audio.Length / AudioChunk.SampleRate),
             ProcessingTime: _clock.Now - releasedAt,
             Text: corrected,
-            Corrections: applied);
+            Corrections: applied,
+            CleanedBy: cleanedBy);
 
-        LastFault = null;
+        if (cleanedBy is not null || !AiCleanup) LastFault = null;
         Completed?.Invoke(this, result);
 
         if (!InjectText) return;

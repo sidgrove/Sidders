@@ -41,6 +41,25 @@ public sealed record SettingsData
     /// <see cref="TranscriptPolish.DropTrailingFullStopIfSingleSentence"/>.
     /// </summary>
     public bool DropSingleSentenceFullStop { get; init; } = true;
+
+    /// <summary>
+    /// Tap the key once to start and once to stop, instead of holding it.
+    /// </summary>
+    /// <remarks>
+    /// Holding a modifier is also how Windows accessibility shortcuts are armed: eight
+    /// seconds on Right Shift opens the Filter Keys prompt, five taps opens Sticky Keys.
+    /// Tap-to-toggle sidesteps the first entirely.
+    /// </remarks>
+    public bool TapToToggle { get; init; }
+
+    /// <summary>Whether transcripts go through the generative clean-up before typing.</summary>
+    public bool AiCleanup { get; init; }
+
+    /// <summary>Gemini API key, or null to use the <c>GEMINI_API_KEY</c> environment variable.</summary>
+    public string? GeminiApiKey { get; init; }
+
+    /// <summary>Gemini model id, or null for the default.</summary>
+    public string? GeminiModel { get; init; }
 }
 
 /// <summary>Settings, persisted as JSON.</summary>

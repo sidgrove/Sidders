@@ -148,6 +148,16 @@ public sealed class TranscriptionsView : UserControl
             body.Children.Add(BuildCorrectionBadges(corrections));
         }
 
+        if (record.CleanedBy is { Length: > 0 } model)
+        {
+            header.Children.Add(new Silkscreen
+            {
+                Text = $"AI · {model}",
+                Foreground = Tokens.Brushes.InkOnDeckDim,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+
         return Panels.DeckCard(body);
     }
 
