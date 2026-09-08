@@ -30,6 +30,34 @@ public static class KeyNames
         return $"Key 0x{virtualKey:X2}";
     }
 
+    /// <summary>A display name for a chord: "Ctrl + Shift + Space".</summary>
+    public static string Describe(int virtualKey, int modifiers)
+    {
+        var parts = new List<string>();
+        var flags = (Murmur.Abstractions.HotkeyModifiers)modifiers;
+        if (flags.HasFlag(Murmur.Abstractions.HotkeyModifiers.Control)) parts.Add("Ctrl");
+        if (flags.HasFlag(Murmur.Abstractions.HotkeyModifiers.Shift)) parts.Add("Shift");
+        if (flags.HasFlag(Murmur.Abstractions.HotkeyModifiers.Alt)) parts.Add("Alt");
+        if (flags.HasFlag(Murmur.Abstractions.HotkeyModifiers.Windows)) parts.Add("Win");
+        parts.Add(Describe(virtualKey));
+        return string.Join(" + ", parts);
+    }
+
+    /// <summary>Whether an Avalonia key is itself a modifier.</summary>
+    public static bool IsModifier(Key key) => key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
+        or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin;
+
+    /// <summary>Avalonia's held modifiers as <see cref="Murmur.Abstractions.HotkeyModifiers"/> flags.</summary>
+    public static int ToModifiers(KeyModifiers modifiers)
+    {
+        var flags = Murmur.Abstractions.HotkeyModifiers.None;
+        if (modifiers.HasFlag(KeyModifiers.Control)) flags |= Murmur.Abstractions.HotkeyModifiers.Control;
+        if (modifiers.HasFlag(KeyModifiers.Shift)) flags |= Murmur.Abstractions.HotkeyModifiers.Shift;
+        if (modifiers.HasFlag(KeyModifiers.Alt)) flags |= Murmur.Abstractions.HotkeyModifiers.Alt;
+        if (modifiers.HasFlag(KeyModifiers.Meta)) flags |= Murmur.Abstractions.HotkeyModifiers.Windows;
+        return (int)flags;
+    }
+
     /// <summary>Whether holding or tapping this key also types something.</summary>
     public static bool TypesACharacter(int virtualKey) =>
         virtualKey is (>= 0x30 and <= 0x39) or (>= 0x41 and <= 0x5A) or (>= 0x60 and <= 0x6F) or (>= 0xBA and <= 0xE2) or 0x20 or 0x09;

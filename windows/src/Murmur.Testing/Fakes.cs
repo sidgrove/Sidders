@@ -90,6 +90,9 @@ public sealed class FakeHotkeySource : IHotkeySource
     /// <inheritdoc />
     public int VirtualKey { get; set; } = 0xA3;
 
+    /// <inheritdoc />
+    public int Modifiers { get; set; }
+
     /// <summary>Whether <see cref="Start"/> has been called.</summary>
     public bool IsRunning { get; private set; }
 

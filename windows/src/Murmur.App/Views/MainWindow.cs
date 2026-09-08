@@ -272,7 +272,7 @@ public sealed class MainWindow : ShellWindow
         }
     }
 
-    private string KeyName => KeyNames.Describe(_composition?.Settings.Data.PushToTalkKey ?? 0xA3);
+    private string KeyName => KeyNames.Describe(_composition?.Settings.Data.PushToTalkKey ?? 0xA3, _composition?.Settings.Data.PushToTalkModifiers ?? 0);
 
     /// <summary>The idle subtitle: which key, which mode, whether AI is on.</summary>
     private void RefreshHint()

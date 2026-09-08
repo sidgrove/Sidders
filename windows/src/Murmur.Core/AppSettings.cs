@@ -23,6 +23,12 @@ public sealed record SettingsData
     /// </remarks>
     public int PushToTalkKey { get; set; } = 0xA3;
 
+    /// <summary>
+    /// Modifiers that must be held with <see cref="PushToTalkKey"/>, as
+    /// <see cref="Murmur.Abstractions.HotkeyModifiers"/> flags. Zero for a bare key.
+    /// </summary>
+    public int PushToTalkModifiers { get; set; }
+
     /// <summary>Where the speech model lives, or null to search the default locations.</summary>
     public string? ModelDirectory { get; set; }
 

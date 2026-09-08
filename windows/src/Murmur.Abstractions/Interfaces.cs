@@ -69,6 +69,26 @@ public interface IAudioDeviceCatalog
     IReadOnlyList<AudioDevice> ListCaptureDevices();
 }
 
+/// <summary>Modifier flags for a chord, stored as an int in settings.</summary>
+[Flags]
+public enum HotkeyModifiers
+{
+    /// <summary>No modifier.</summary>
+    None = 0,
+
+    /// <summary>Either Ctrl.</summary>
+    Control = 1,
+
+    /// <summary>Either Shift.</summary>
+    Shift = 2,
+
+    /// <summary>Either Alt.</summary>
+    Alt = 4,
+
+    /// <summary>Either Windows key.</summary>
+    Windows = 8,
+}
+
 /// <summary>Raised when the push-to-talk key goes down or comes up.</summary>
 public interface IHotkeySource : IDisposable
 {
@@ -80,6 +100,12 @@ public interface IHotkeySource : IDisposable
 
     /// <summary>The virtual-key code being watched. Read on every event, so a change applies to the next press.</summary>
     int VirtualKey { get; set; }
+
+    /// <summary>
+    /// Modifiers that must be held when <see cref="VirtualKey"/> goes down, as
+    /// <see cref="HotkeyModifiers"/> flags. Zero for a bare key.
+    /// </summary>
+    int Modifiers { get; set; }
 
     /// <summary>Begins listening.</summary>
     /// <returns>False if the hook could not be installed.</returns>

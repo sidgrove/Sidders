@@ -20,3 +20,19 @@ public sealed class SettingsDefaultsTests
         data.PushToTalkKey.ShouldBe(124);
     }
 }
+
+/// <summary>Chord settings survive a round trip and default to a bare key.</summary>
+public sealed class ChordSettingsTests
+{
+    [Fact]
+    public void Modifiers_default_to_none_and_round_trip()
+    {
+        new SettingsData().PushToTalkModifiers.ShouldBe(0);
+
+        var data = new SettingsData { PushToTalkKey = 0x20, PushToTalkModifiers = (int)(Murmur.Abstractions.HotkeyModifiers.Control | Murmur.Abstractions.HotkeyModifiers.Shift) };
+        var json = JsonSerializer.Serialize(data, SettingsJsonContext.Default.SettingsData);
+        var back = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.SettingsData);
+        back.ShouldNotBeNull().PushToTalkModifiers.ShouldBe(3);
+        back.PushToTalkKey.ShouldBe(0x20);
+    }
+}

@@ -111,6 +111,13 @@ public sealed class DictationEngine : IAsyncDisposable
         set { _hotkey.VirtualKey = value; Log.Info($"hotkey changed to 0x{value:X2}"); }
     }
 
+    /// <summary>Modifiers required with the key, as <see cref="HotkeyModifiers"/> flags.</summary>
+    public int HotkeyModifiers
+    {
+        get => _hotkey.Modifiers;
+        set { _hotkey.Modifiers = value; Log.Info($"hotkey modifiers changed to {(Abstractions.HotkeyModifiers)value}"); }
+    }
+
     /// <summary>Raised when a dictation completes and produced text.</summary>
     public event EventHandler<DictationResult>? Completed;
 

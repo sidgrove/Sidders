@@ -169,6 +169,35 @@ public sealed class PushToTalkHook : IHotkeySource
     }
 
     /// <inheritdoc />
+    public int Modifiers { get; set; }
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
+    /// <summary>Whether every modifier in <see cref="Modifiers"/> is currently down.</summary>
+    /// <remarks>
+    /// <c>GetAsyncKeyState</c> rather than tracking modifier events ourselves: the hook is
+    /// installed after the app starts, so a modifier already held at that moment would
+    /// otherwise be invisible until released.
+    /// </remarks>
+    private bool ModifiersHeld()
+    {
+        var required = (HotkeyModifiers)Modifiers;
+        if (required == HotkeyModifiers.None) return true;
+
+        static bool Down(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
+
+        if (required.HasFlag(HotkeyModifiers.Control) && !Down(VK_CONTROL)) return false;
+        if (required.HasFlag(HotkeyModifiers.Shift) && !Down(VK_SHIFT)) return false;
+        if (required.HasFlag(HotkeyModifiers.Alt) && !Down(VK_MENU)) return false;
+        if (required.HasFlag(HotkeyModifiers.Windows) && !Down(VK_LWIN) && !Down(VK_RWIN)) return false;
+        return true;
+    }
+
+    private const int VK_LWIN = 0x5B;
+    private const int VK_RWIN = 0x5C;
+
+    /// <inheritdoc />
     public event EventHandler? Pressed;
 
     /// <inheritdoc />
@@ -287,6 +316,12 @@ public sealed class PushToTalkHook : IHotkeySource
         {
             // The OS re-fires key-down while a key is held; only the first is a press.
             if (_isDown) return;
+
+            // A chord: the trigger only counts if every required modifier is already held.
+            // Release is unconditional, so letting go of the modifier first cannot leave a
+            // recording running.
+            if (!ModifiersHeld()) return;
+
             _isDown = true;
             Pressed?.Invoke(this, EventArgs.Empty);
         }
