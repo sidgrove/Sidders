@@ -41,9 +41,11 @@ public sealed class TranscriptionsView : UserControl
         {
             Children =
             {
-                Panels.Docked(_search, Dock.Top),
-                Panels.Docked(Panels.Split(_count, clear), Dock.Bottom),
-                new ScrollViewer { Content = _list },
+                Panels.Docked(Gutter(_search), Dock.Top),
+                Panels.Docked(Gutter(Panels.Split(_count, clear)), Dock.Bottom),
+                // Padding inside the scroll viewer, not margin outside it: the viewer clips to its
+                // bounds, and without room the cards' shadows are cut off at the sides.
+                new ScrollViewer { Content = _list, Padding = new Thickness(Tokens.Layout.ScrollGutter, 0) },
             },
         };
 
@@ -51,6 +53,12 @@ public sealed class TranscriptionsView : UserControl
         // must only be rebuilt on the UI thread.
         _store.Changed += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
         Refresh();
+    }
+
+    private static Control Gutter(Control control)
+    {
+        control.Margin = new Thickness(Tokens.Layout.ScrollGutter, 0);
+        return control;
     }
 
     /// <summary>Puts the caret in the search field.</summary>

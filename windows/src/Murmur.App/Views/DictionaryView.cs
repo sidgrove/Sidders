@@ -44,14 +44,20 @@ public sealed class DictionaryView : UserControl
         {
             Children =
             {
-                Panels.Docked(Panels.Split(_search, add), Dock.Top),
-                Panels.Docked(Panels.Split(_count, open), Dock.Bottom),
-                new ScrollViewer { Content = _list },
+                Panels.Docked(Gutter(Panels.Split(_search, add)), Dock.Top),
+                Panels.Docked(Gutter(Panels.Split(_count, open)), Dock.Bottom),
+                new ScrollViewer { Content = _list, Padding = new Thickness(Tokens.Layout.ScrollGutter, 0) },
             },
         };
 
         _file.Changed += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
         Refresh();
+    }
+
+    private static Control Gutter(Control control)
+    {
+        control.Margin = new Thickness(Tokens.Layout.ScrollGutter, 0);
+        return control;
     }
 
     /// <summary>Puts the caret in the search field.</summary>
@@ -228,7 +234,7 @@ public sealed class DictionaryEditorWindow : ShellWindow
         {
             var text = Text.Body(warning.Message);
             text.Foreground = Tokens.Brushes.Amber;
-            _warnings.Children.Add(Card.Notice(text, Tokens.Brushes.AmberLight, new Avalonia.Media.SolidColorBrush(Tokens.Colors.AmberMid, Tokens.Opacity.Ring)));
+            _warnings.Children.Add(Card.Notice(text, Tokens.Brushes.AmberLight, new Avalonia.Media.SolidColorBrush(Tokens.Colors.AmberMid, Tokens.Opacity.FocusBorder)));
         }
 
         _save.IsEnabled = IsValid;

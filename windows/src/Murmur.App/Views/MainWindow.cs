@@ -56,11 +56,11 @@ public sealed class MainWindow : ShellWindow
         _dot = new StatusDot { VerticalAlignment = VerticalAlignment.Center };
         _state = Text.BodyStrong("Ready");
         _hint = Text.Muted(string.Empty);
-        _counter = Text.Number("00:00", Tokens.Fonts.Counter, Tokens.Brushes.Ink);
+        _counter = Text.Hero("00:00");
         _counter.IsVisible = false;
         _bars = new LevelBars(Tokens.Layout.BarsCount, Tokens.Layout.BarsHeight) { HorizontalAlignment = HorizontalAlignment.Center };
 
-        _record = new SgButton("Start recording", SgButton.Kind.Primary);
+        _record = new SgButton("Start recording", SgButton.Kind.Hero);
         _record.Click += (_, _) => ToggleRecording();
 
         _tabs = new Segmented(["Transcriptions", "Dictionary"]);
@@ -129,7 +129,7 @@ public sealed class MainWindow : ShellWindow
 
         var content = Panels.Column(Tokens.Space.Roomy, Panels.Split(status, right), _bars);
         var card = Card.Standard(content);
-        card.Margin = new Thickness(0, 0, 0, Tokens.Space.Roomy);
+        card.Margin = new Thickness(Tokens.Layout.ScrollGutter, 0, Tokens.Layout.ScrollGutter, Tokens.Space.Roomy);
         return card;
     }
 
@@ -138,9 +138,9 @@ public sealed class MainWindow : ShellWindow
         var dismiss = new SgButton("Dismiss", SgButton.Kind.Quiet, compact: true);
         dismiss.Click += (_, _) => _fault.IsVisible = false;
 
-        var notice = Card.Notice(Panels.Split(_faultText, dismiss), Tokens.Brushes.RoseLight, new Avalonia.Media.SolidColorBrush(Tokens.Colors.Rose, Tokens.Opacity.Edge));
+        var notice = Card.Notice(Panels.Split(_faultText, dismiss), Tokens.Brushes.RoseLight, Tokens.Brushes.RoseTint);
         notice.IsVisible = false;
-        notice.Margin = new Thickness(0, 0, 0, Tokens.Space.Roomy);
+        notice.Margin = new Thickness(Tokens.Layout.ScrollGutter, 0, Tokens.Layout.ScrollGutter, Tokens.Space.Roomy);
         return notice;
     }
 

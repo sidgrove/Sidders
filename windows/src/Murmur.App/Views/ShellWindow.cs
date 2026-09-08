@@ -9,17 +9,17 @@ using Murmur.App.Design;
 namespace Murmur.App.Views;
 
 /// <summary>
-/// A Sidgrove window: the wash background, a slim caption strip with the mark and the
-/// title in place of the OS title bar, thin glyphs for the window controls.
+/// A Sidgrove window: the wash background, a slim caption strip with the mark and a
+/// Very Vogue title in place of the OS title bar, thin glyphs for the window controls.
 /// </summary>
 /// <remarks>
 /// The client area is extended over the title bar so the whole window is one surface.
 /// Dragging the strip moves the window; double-clicking it toggles maximise; Escape closes
-/// a dialog. Nothing the OS chrome did is lost, it just stops looking like Win32.
+/// a sheet.
 /// </remarks>
 public abstract class ShellWindow : Window
 {
-    /// <summary>Whether the window offers minimise and maximise, or close only.</summary>
+    /// <summary>Whether this is a sheet: close only, Escape closes.</summary>
     protected bool IsSheet { get; init; }
 
     /// <summary>Configures the chrome. Call before setting content.</summary>
@@ -39,9 +39,6 @@ public abstract class ShellWindow : Window
     }
 
     /// <summary>Wraps <paramref name="body"/> beneath the caption strip, on the wash.</summary>
-    /// <param name="title">The window title as shown.</param>
-    /// <param name="body">The content.</param>
-    /// <param name="trailing">Optional controls placed at the right of the strip, before the glyphs.</param>
     protected Control Frame(string title, Control body, Control? trailing = null)
     {
         var root = new DockPanel();
@@ -52,25 +49,15 @@ public abstract class ShellWindow : Window
 
     private Border BuildCaption(string title, Control? trailing)
     {
+        var name = Text.CaptionTitle(title);
+        name.VerticalAlignment = VerticalAlignment.Center;
+
         var left = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = Tokens.Space.Snug + Tokens.Space.Hair,
+            Spacing = Tokens.Space.Base,
             VerticalAlignment = VerticalAlignment.Center,
-            Children =
-            {
-                new LogoTile { VerticalAlignment = VerticalAlignment.Center },
-                new TextBlock
-                {
-                    Text = title,
-                    FontFamily = Tokens.Fonts.Sans,
-                    FontSize = Tokens.Fonts.Body,
-                    FontWeight = Avalonia.Media.FontWeight.Bold,
-                    LetterSpacing = Tokens.Fonts.HeadingTracking,
-                    Foreground = Tokens.Brushes.Ink,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-            },
+            Children = { new LogoMark { VerticalAlignment = VerticalAlignment.Center }, name },
         };
 
         var glyphs = new StackPanel
@@ -107,7 +94,7 @@ public abstract class ShellWindow : Window
         var strip = new Border
         {
             Height = Tokens.Layout.CaptionHeight,
-            Padding = new Thickness(Tokens.Space.Roomy, 0, Tokens.Space.Snug, 0),
+            Padding = new Thickness(Tokens.Space.Wide, 0, Tokens.Space.Base, 0),
             Background = Tokens.Brushes.None,
             Child = new DockPanel { Children = { right, left } },
         };

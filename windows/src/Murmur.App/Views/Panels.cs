@@ -16,7 +16,7 @@ internal static class Panels
         return control;
     }
 
-    /// <summary>A label above a control.</summary>
+    /// <summary>An eyebrow above a control.</summary>
     public static StackPanel Labelled(string label, Control content) => new()
     {
         Spacing = Tokens.Space.Chip,
@@ -70,26 +70,30 @@ internal static class Panels
         return Split(text, toggle);
     }
 
-    /// <summary>Centred "nothing here yet" copy.</summary>
-    public static Control EmptyState(string emoji, string label, string detail) => new StackPanel
+    /// <summary>The empty-state card. <c>.sg-empty</c>: white, centred, a title in the serif.</summary>
+    public static Control EmptyState(string emoji, string label, string detail)
     {
-        HorizontalAlignment = HorizontalAlignment.Center,
-        VerticalAlignment = VerticalAlignment.Center,
-        Spacing = Tokens.Space.Snug,
-        Margin = new Thickness(0, Tokens.Space.Page),
-        Children =
-        {
-            new TextBlock { Text = emoji, FontSize = Tokens.Fonts.Counter, HorizontalAlignment = HorizontalAlignment.Center },
-            Centre(Text.BodyStrong(label)),
-            Centre(Text.Muted(detail)),
-        },
-    };
+        var title = Text.Title(label);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        title.TextAlignment = Avalonia.Media.TextAlignment.Center;
 
-    private static TextBlock Centre(TextBlock block)
-    {
-        block.HorizontalAlignment = HorizontalAlignment.Center;
-        block.TextAlignment = Avalonia.Media.TextAlignment.Center;
-        return block;
+        var body = Text.Muted(detail);
+        body.HorizontalAlignment = HorizontalAlignment.Center;
+        body.TextAlignment = Avalonia.Media.TextAlignment.Center;
+
+        var card = Card.Empty(new StackPanel
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Spacing = Tokens.Space.Grid,
+            Children =
+            {
+                new TextBlock { Text = emoji, FontSize = Tokens.Fonts.Hero, HorizontalAlignment = HorizontalAlignment.Center },
+                title,
+                body,
+            },
+        });
+        card.Margin = new Thickness(Tokens.Layout.ScrollGutter, Tokens.Space.Roomy);
+        return card;
     }
 
     /// <summary>Constrains content to the reading column and centres it.</summary>

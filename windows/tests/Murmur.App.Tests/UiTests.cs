@@ -26,7 +26,11 @@ public static class TestAppBuilder
 public sealed class TestApp : Application
 {
     /// <inheritdoc />
-    public override void Initialize() => Styles.Add(new FluentTheme());
+    public override void Initialize()
+    {
+        Murmur.App.Design.BundledFonts.Register();
+        Styles.Add(new FluentTheme());
+    }
 }
 
 /// <summary>Real UI tests, running with no display.</summary>
@@ -112,6 +116,7 @@ public sealed class ControlTests
     public void Buttons_take_the_token_heights()
     {
         new SgButton("Go", SgButton.Kind.Primary).Height.ShouldBe(Tokens.Layout.ButtonHeight);
+        new SgButton("Go", SgButton.Kind.Hero).Height.ShouldBe(Tokens.Layout.HeroButtonHeight);
         new SgButton("Go", SgButton.Kind.Quiet, compact: true).Height.ShouldBe(Tokens.Layout.ButtonHeightSmall);
     }
 
@@ -151,7 +156,7 @@ public sealed class DesignSystemTests
         Tokens.Radius.Control.ShouldBe(8);
         Tokens.Radius.Inner.ShouldBe(10);
         Tokens.Radius.Card.ShouldBe(12);
-        Tokens.Radius.Pill.ShouldBe(99);
+        Tokens.Radius.Pill.ShouldBe(999);
     }
 
     [AvaloniaFact]
@@ -162,8 +167,22 @@ public sealed class DesignSystemTests
     }
 
     [AvaloniaFact]
-    public void Buttons_press_with_the_brand_scale()
+    public void Buttons_press_with_a_one_pixel_travel()
     {
-        Tokens.Motion.PressScale.ShouldBe(0.93);
+        Tokens.Motion.PressTravel.ShouldBe(1);
+    }
+}
+
+/// <summary>The three bundled faces must resolve at the weights the views ask for.</summary>
+public sealed class FontTests
+{
+    [AvaloniaFact]
+    public void Bundled_fonts_resolve()
+    {
+        var manager = Avalonia.Media.FontManager.Current;
+        manager.TryGetGlyphTypeface(new Avalonia.Media.Typeface(Tokens.Fonts.Sans), out _).ShouldBeTrue("DM Sans regular");
+        manager.TryGetGlyphTypeface(new Avalonia.Media.Typeface(Tokens.Fonts.Sans, weight: Avalonia.Media.FontWeight.Bold), out _).ShouldBeTrue("DM Sans bold");
+        manager.TryGetGlyphTypeface(new Avalonia.Media.Typeface(Tokens.Fonts.Serif), out _).ShouldBeTrue("Very Vogue Text");
+        manager.TryGetGlyphTypeface(new Avalonia.Media.Typeface(Tokens.Fonts.Display), out _).ShouldBeTrue("Perfectly Nineties");
     }
 }

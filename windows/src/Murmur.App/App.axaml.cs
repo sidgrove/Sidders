@@ -27,7 +27,11 @@ public partial class App : Application
     public static bool StartMinimized { get; set; }
 
     /// <inheritdoc />
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        Design.BundledFonts.Register();
+        AvaloniaXamlLoader.Load(this);
+    }
 
     /// <inheritdoc />
     public override void OnFrameworkInitializationCompleted()

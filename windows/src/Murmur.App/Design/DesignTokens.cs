@@ -8,105 +8,136 @@ namespace Murmur.App.Design;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Mirrors <c>lib/tokens.ts</c> and <c>globals.css</c> in Sidgrove Intelligence, and the
-/// sidgrove-brand reference: lavender-blue brand, cool-slate neutrals with a blue undertone,
-/// white cards on a washed background, DM Sans everywhere, sentence case, soft layered
-/// shadows, radii on the tightened "crispness" scale (card 12, inner 10, control 8, pill 99).
+/// Every value here is lifted from a shipped Sidgrove surface and the file is named beside
+/// it: <c>app/globals.css</c> and <c>components/ui-ext/sidgrove-design.css</c> in Sidgrove
+/// Intelligence (the app), <c>components/ui/PillNav.tsx</c> (the nav language), and
+/// <c>index.html</c> on sidgrove.com (the site). Where the two disagree the app wins — it is
+/// the surface Dave signs off on daily.
 /// </para>
 /// <para>
-/// <b>Views must not contain literal values.</b> If a control needs a number that isn't here,
-/// add the token rather than inlining it.
+/// The rules that came with those values, in Dave's words where they exist:
+/// no gradients on components ("that little gradient thing on the card itself is shit");
+/// no coloured fills for selection ("I didn't want these AI slop coloured buttons");
+/// selection is elevation and weight, never hue; cards are opaque white; one sans for
+/// everything ("stick to DM Sans"); serif is for titles and hero numbers only.
 /// </para>
-/// <para>
-/// Colour rules from the brand: brand blue for the primary action and anything "live";
-/// rose only for negative or attention; amber only for warnings; no other hues.
-/// </para>
+/// <para><b>Views must not contain literal values.</b> Add a token instead.</para>
 /// </remarks>
 public static class Tokens
 {
     // ---- Colour ----
 
-    /// <summary>The palette. Names follow the <c>T</c> object in the web apps.</summary>
+    /// <summary>The palette. Names follow the <c>T</c> object and the CSS variables.</summary>
     public static class Colors
     {
-        /// <summary>Brand lavender-blue. Accent, active states, the listening bars.</summary>
+        /// <summary>Brand lavender-blue. <c>--sg-brand</c>.</summary>
         public static Color Brand => Rgb(0x6874B4);
 
-        /// <summary>Very light brand tint, for hover and selected backgrounds.</summary>
-        public static Color BrandLight => Rgb(0xEEF0FA);
-
-        /// <summary>Mid tint, placeholder dots and idle bars.</summary>
-        public static Color BrandMid => Rgb(0xA8B0D8);
-
-        /// <summary>Dark brand, strong text and the far end of the primary gradient.</summary>
+        /// <summary>Brand-strong, the ink of the brand: active labels, primary text on pale pills. <c>--sg-brand-strong</c>.</summary>
         public static Color BrandStrong => Rgb(0x3D4785);
 
-        /// <summary>Muted rose: negative, attention, the recording dot in the tray.</summary>
+        /// <summary>Brand mid. Hover border on the primary pill. <c>--teal-mid</c>.</summary>
+        public static Color BrandMid => Rgb(0xA8B0D8);
+
+        /// <summary>Very light brand tint. <c>--teal-light</c>.</summary>
+        public static Color BrandLight => Rgb(0xEEF0FA);
+
+        /// <summary>The primary pill's fill. <c>.sg-btn-brand</c>.</summary>
+        public static Color PillFill => Rgb(0xECEFFA);
+
+        /// <summary>The primary pill's fill under the pointer.</summary>
+        public static Color PillFillHover => Rgb(0xE3E7F3);
+
+        /// <summary>The primary pill's border.</summary>
+        public static Color PillBorder => Rgb(0xD4DAEE);
+
+        /// <summary>Rose: negative, destructive. <c>--coral</c>.</summary>
         public static Color Rose => Rgb(0xB8456B);
 
-        /// <summary>Rose tint background.</summary>
+        /// <summary>Rose tint. <c>--coral-light</c>.</summary>
         public static Color RoseLight => Rgb(0xFDF2F6);
 
-        /// <summary>Muted amber text.</summary>
+        /// <summary>Amber text. <c>--amber</c>.</summary>
         public static Color Amber => Rgb(0x7A5E1E);
 
-        /// <summary>Amber mid, for warning badges.</summary>
+        /// <summary>Amber mid. <c>--amber-mid</c>.</summary>
         public static Color AmberMid => Rgb(0xC69B2D);
 
-        /// <summary>Amber tint background.</summary>
+        /// <summary>Amber tint. <c>--amber-light</c>.</summary>
         public static Color AmberLight => Rgb(0xFDF9EE);
 
-        /// <summary>Primary text and headings.</summary>
-        public static Color Ink => Rgb(0x1A1D2E);
+        /// <summary>Primary text. The app's ramp: <c>--ink #0f1226</c>.</summary>
+        public static Color Ink => Rgb(0x0F1226);
 
-        /// <summary>Secondary text.</summary>
+        /// <summary>The site's ink, which the hero button deepens to on hover.</summary>
+        public static Color InkSite => Rgb(0x1A1D2E);
+
+        /// <summary>Secondary text and inactive nav. <c>--muted</c>.</summary>
         public static Color Muted => Rgb(0x525672);
 
-        /// <summary>Tertiary text, placeholders. Clears AA on the wash.</summary>
-        public static Color Faint => Rgb(0x646982);
+        /// <summary>Tertiary text, icons at rest. <c>--sg-faint</c>.</summary>
+        public static Color Faint => Rgb(0x8B8FA6);
 
-        /// <summary>Borders and dividers.</summary>
+        /// <summary>Hairline dividers. <c>--sg-line</c>.</summary>
         public static Color Line => Rgb(0xDFE1EE);
 
-        /// <summary>Card borders, a touch stronger than a divider.</summary>
+        /// <summary>Card shell border. <c>--sg-surface-border</c>.</summary>
         public static Color CardBorder => Rgb(0xD8DEEC);
 
-        /// <summary>Inner panel and hover background.</summary>
+        /// <summary>Card shell border under the pointer. <c>--sg-surface-border-strong</c>.</summary>
+        public static Color CardBorderStrong => Rgb(0xC5CCE0);
+
+        /// <summary>Input and ghost-button chrome. <c>--sg-panel-border</c>.</summary>
+        public static Color PanelBorder => Rgb(0xE3E6F0);
+
+        /// <summary>Inner panel fill. <c>--surface</c>.</summary>
         public static Color Surface => Rgb(0xF6F7FC);
 
-        /// <summary>The page wash behind everything.</summary>
+        /// <summary>The page wash. <c>--bg</c>.</summary>
         public static Color Wash => Rgb(0xF0F1F8);
 
-        /// <summary>Card background.</summary>
+        /// <summary>Cards. Opaque white, always.</summary>
         public static Color Card => Rgb(0xFFFFFF);
 
-        /// <summary>Text on a brand-coloured surface.</summary>
+        /// <summary>Text on brand-strong.</summary>
         public static Color OnBrand => Rgb(0xFFFFFF);
 
         private static Color Rgb(uint hex) => Color.FromRgb(
             (byte)((hex >> 16) & 0xFF), (byte)((hex >> 8) & 0xFF), (byte)(hex & 0xFF));
     }
 
-    /// <summary>Brushes for the colours above.</summary>
+    /// <summary>Brushes for the colours above, plus the few translucent ones the system uses.</summary>
     public static class Brushes
     {
         /// <inheritdoc cref="Colors.Brand"/>
         public static IBrush Brand { get; } = new SolidColorBrush(Colors.Brand);
 
-        /// <inheritdoc cref="Colors.BrandLight"/>
-        public static IBrush BrandLight { get; } = new SolidColorBrush(Colors.BrandLight);
+        /// <inheritdoc cref="Colors.BrandStrong"/>
+        public static IBrush BrandStrong { get; } = new SolidColorBrush(Colors.BrandStrong);
 
         /// <inheritdoc cref="Colors.BrandMid"/>
         public static IBrush BrandMid { get; } = new SolidColorBrush(Colors.BrandMid);
 
-        /// <inheritdoc cref="Colors.BrandStrong"/>
-        public static IBrush BrandStrong { get; } = new SolidColorBrush(Colors.BrandStrong);
+        /// <inheritdoc cref="Colors.BrandLight"/>
+        public static IBrush BrandLight { get; } = new SolidColorBrush(Colors.BrandLight);
+
+        /// <inheritdoc cref="Colors.PillFill"/>
+        public static IBrush PillFill { get; } = new SolidColorBrush(Colors.PillFill);
+
+        /// <inheritdoc cref="Colors.PillFillHover"/>
+        public static IBrush PillFillHover { get; } = new SolidColorBrush(Colors.PillFillHover);
+
+        /// <inheritdoc cref="Colors.PillBorder"/>
+        public static IBrush PillBorder { get; } = new SolidColorBrush(Colors.PillBorder);
 
         /// <inheritdoc cref="Colors.Rose"/>
         public static IBrush Rose { get; } = new SolidColorBrush(Colors.Rose);
 
         /// <inheritdoc cref="Colors.RoseLight"/>
         public static IBrush RoseLight { get; } = new SolidColorBrush(Colors.RoseLight);
+
+        /// <summary>Rose at 10%, the destructive button's fill.</summary>
+        public static IBrush RoseTint { get; } = new SolidColorBrush(Colors.Rose, Opacity.Destructive);
 
         /// <inheritdoc cref="Colors.Amber"/>
         public static IBrush Amber { get; } = new SolidColorBrush(Colors.Amber);
@@ -120,6 +151,9 @@ public static class Tokens
         /// <inheritdoc cref="Colors.Ink"/>
         public static IBrush Ink { get; } = new SolidColorBrush(Colors.Ink);
 
+        /// <inheritdoc cref="Colors.InkSite"/>
+        public static IBrush InkSite { get; } = new SolidColorBrush(Colors.InkSite);
+
         /// <inheritdoc cref="Colors.Muted"/>
         public static IBrush Muted { get; } = new SolidColorBrush(Colors.Muted);
 
@@ -131,6 +165,12 @@ public static class Tokens
 
         /// <inheritdoc cref="Colors.CardBorder"/>
         public static IBrush CardBorder { get; } = new SolidColorBrush(Colors.CardBorder);
+
+        /// <inheritdoc cref="Colors.CardBorderStrong"/>
+        public static IBrush CardBorderStrong { get; } = new SolidColorBrush(Colors.CardBorderStrong);
+
+        /// <inheritdoc cref="Colors.PanelBorder"/>
+        public static IBrush PanelBorder { get; } = new SolidColorBrush(Colors.PanelBorder);
 
         /// <inheritdoc cref="Colors.Surface"/>
         public static IBrush Surface { get; } = new SolidColorBrush(Colors.Surface);
@@ -144,104 +184,151 @@ public static class Tokens
         /// <inheritdoc cref="Colors.OnBrand"/>
         public static IBrush OnBrand { get; } = new SolidColorBrush(Colors.OnBrand);
 
-        /// <summary>Transparent, for buttons that draw themselves.</summary>
+        /// <summary>Transparent.</summary>
         public static IBrush None { get; } = Avalonia.Media.Brushes.Transparent;
 
-        /// <summary>The primary button: brand to brand-strong, 135°.</summary>
-        public static IBrush PrimaryGradient { get; } = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
-            GradientStops = { new GradientStop(Colors.Brand, 0), new GradientStop(Colors.BrandStrong, 1) },
-        };
+        /// <summary>The pill nav's bed: brand ink at 16%. <c>PILL_NAV_BED</c>.</summary>
+        public static IBrush NavBed { get; } = new SolidColorBrush(Colors.BrandStrong, Opacity.NavBed);
 
-        /// <summary>Brand-tinted focus ring.</summary>
-        public static IBrush FocusRing { get; } = new SolidColorBrush(Colors.Brand, Opacity.Ring);
+        /// <summary>A pill under the pointer on the bed: white at 70%.</summary>
+        public static IBrush NavHover { get; } = new SolidColorBrush(Colors.Card, Opacity.NavHover);
 
-        /// <summary>Brand at badge-background strength.</summary>
-        public static IBrush BrandTint { get; } = new SolidColorBrush(Colors.Brand, Opacity.Tint);
-    }
+        /// <summary>Hairlines between elements that sit on a card. <c>--line</c>.</summary>
+        public static IBrush Hairline { get; } = new SolidColorBrush(Colors.Brand, Opacity.Hairline);
 
-    /// <summary>Opacities used for tints, rings and washes.</summary>
-    public static class Opacity
-    {
-        /// <summary>Badge and hover tint of a hue.</summary>
-        public const double Tint = 0.08;
+        /// <summary>The focused field's border. <c>.me-search-input:focus</c>.</summary>
+        public static IBrush FocusBorder { get; } = new SolidColorBrush(Colors.Brand, Opacity.FocusBorder);
 
-        /// <summary>A hover border in the brand hue.</summary>
-        public const double Edge = 0.15;
-
-        /// <summary>The focus ring.</summary>
-        public const double Ring = 0.45;
-
-        /// <summary>The top wash bloom on the page background.</summary>
-        public const double WashTop = 0.07;
-
-        /// <summary>The bottom wash bloom on the page background.</summary>
-        public const double WashBottom = 0.05;
-
-        /// <summary>Glass card fill.</summary>
-        public const double Glass = 0.88;
-
-        /// <summary>Disabled controls and rows.</summary>
-        public const double Disabled = 0.45;
+        /// <summary>The focused field's ring.</summary>
+        public static IBrush FocusRing { get; } = new SolidColorBrush(Colors.Brand, Opacity.FocusRing);
 
         /// <summary>Idle listening bars.</summary>
-        public const double BarsIdle = 0.35;
+        public static IBrush BarsIdle { get; } = new SolidColorBrush(Colors.BrandMid, Opacity.BarsIdle);
+
+        /// <summary>The lit top edge inside the hero button.</summary>
+        public static IBrush HeroHighlight { get; } = new SolidColorBrush(Colors.Card, Opacity.HeroInsetHighlight);
+    }
+
+    /// <summary>The translucencies the system uses. Every one is named in a source file.</summary>
+    public static class Opacity
+    {
+        /// <summary><c>PILL_NAV_BED</c> — brand ink at 16%.</summary>
+        public const double NavBed = 0.16;
+
+        /// <summary>Pill hover on the bed, white at 70%.</summary>
+        public const double NavHover = 0.70;
+
+        /// <summary><c>--line</c> — brand at 12%.</summary>
+        public const double Hairline = 0.12;
+
+        /// <summary>Focused field border, brand at 40%.</summary>
+        public const double FocusBorder = 0.40;
+
+        /// <summary>Focused field ring, brand at 10%.</summary>
+        public const double FocusRing = 0.10;
+
+        /// <summary>Destructive button fill, rose at 10%.</summary>
+        public const double Destructive = 0.10;
+
+        /// <summary>Top wash bloom, brand at 7%. <c>body</c> background.</summary>
+        public const double WashTop = 0.07;
+
+        /// <summary>Bottom wash bloom, brand-strong at 5%.</summary>
+        public const double WashBottom = 0.05;
+
+        /// <summary>Disabled controls.</summary>
+        public const double Disabled = 0.50;
+
+        /// <summary>Idle listening bars.</summary>
+        public const double BarsIdle = 0.55;
+
+        /// <summary>The lit top edge inside the hero button. <c>.button</c> on the site.</summary>
+        public const double HeroInsetHighlight = 0.16;
     }
 
     // ---- Type ----
 
     /// <summary>
-    /// Inter, bundled by Avalonia with every weight. One family for everything; numbers
-    /// are tabular via <see cref="Tabular"/>.
+    /// One font per role, exactly as <c>globals.css</c> declares them: DM Sans for body,
+    /// labels, buttons and inputs; Very Vogue Text for titles; Perfectly Nineties for the one
+    /// hero number. All three ship inside the app.
     /// </summary>
     public static class Fonts
     {
-        /// <summary>The one UI family, loaded from the bundled TTFs.</summary>
-        public static FontFamily Sans { get; } = new("fonts:Inter#Inter");
+        /// <summary>DM Sans. Everything that is not a title or the hero number.</summary>
+        public static FontFamily Sans { get; } = new("fonts:Sidders#DM Sans");
 
-        /// <summary>Tabular figures for anything that ticks or aligns.</summary>
+        /// <summary>Very Vogue Text. Titles only, weight 400.</summary>
+        public static FontFamily Serif { get; } = new("fonts:Sidders#Very Vogue");
+
+        /// <summary>Perfectly Nineties. The hero number only, weight 400.</summary>
+        public static FontFamily Display { get; } = new("fonts:Sidders#Perfectly Nineties");
+
+        /// <summary>Tabular figures, the <c>.num</c> class.</summary>
         public static FontFeatureCollection Tabular { get; } = [new FontFeature { Tag = "tnum" }];
 
-        /// <summary>Badges and eyebrow labels. Uppercase, tracked.</summary>
-        public const double Badge = 10;
+        /// <summary>Eyebrow labels. <c>.sg-hero-eyebrow</c>: 10.5px 700, 0.14em, uppercase.</summary>
+        public const double Eyebrow = 10.5;
+
+        /// <summary>Chips and badges. 10.5px 600, 0.02em.</summary>
+        public const double Badge = 10.5;
 
         /// <summary>Captions and metadata.</summary>
         public const double Caption = 11;
 
-        /// <summary>Secondary body, table cells, helper text.</summary>
-        public const double Small = 12.5;
+        /// <summary>Pill nav labels and ghost buttons. 12px.</summary>
+        public const double Small = 12;
 
-        /// <summary>Body.</summary>
-        public const double Body = 14;
+        /// <summary>Primary buttons and body. 13px.</summary>
+        public const double Body = 13;
 
-        /// <summary>The transcript text — the thing you read most.</summary>
+        /// <summary>Base text, kit inputs. 14px.</summary>
+        public const double Base = 14;
+
+        /// <summary>The transcript, the thing you read most. 15px.</summary>
         public const double Reading = 15;
 
-        /// <summary>Section headings.</summary>
-        public const double Heading = 18;
+        /// <summary>Section headings, DM Sans 700 tight. 16px.</summary>
+        public const double Heading = 16;
 
-        /// <summary>The window title.</summary>
-        public const double Title = 22;
+        /// <summary>The site's hero button label. 17px.</summary>
+        public const double HeroButton = 17;
 
-        /// <summary>The live counter while recording.</summary>
-        public const double Counter = 28;
+        /// <summary>A page title in Very Vogue Text. <c>.sg-hero-title</c>: 28px.</summary>
+        public const double Title = 28;
 
-        /// <summary>Tracking for badges and eyebrows, in device-independent pixels at badge size.</summary>
-        public const double BadgeTracking = 0.6;
+        /// <summary>The caption-strip title in Very Vogue Text.</summary>
+        public const double CaptionTitle = 22;
 
-        /// <summary>Tracking for headings. Tight, as <c>.display</c> is.</summary>
+        /// <summary>The hero number in Perfectly Nineties.</summary>
+        public const double Hero = 34;
+
+        /// <summary>Eyebrow tracking, 0.14em at 10.5px.</summary>
+        public const double EyebrowTracking = 1.47;
+
+        /// <summary>Chip tracking, 0.02em at 10.5px.</summary>
+        public const double BadgeTracking = 0.21;
+
+        /// <summary>Title tracking, -0.02em at 28px.</summary>
+        public const double TitleTracking = -0.56;
+
+        /// <summary>Heading tracking, <c>.display</c> -0.025em at 16px.</summary>
         public const double HeadingTracking = -0.4;
+
+        /// <summary>Button tracking, -0.01em at 13px.</summary>
+        public const double ButtonTracking = -0.13;
     }
 
     // ---- Geometry ----
 
-    /// <summary>A 4pt grid.</summary>
+    /// <summary>The 8px rhythm the site declares, with the small steps the app uses.</summary>
     public static class Space
     {
         /// <summary>2</summary>
         public const double Hair = 2;
+
+        /// <summary>3 — the pill-nav track inset. <c>PILL_NAV_TRACK_INSET</c>.</summary>
+        public const double TrackInset = 3;
 
         /// <summary>4</summary>
         public const double Tight = 4;
@@ -255,10 +342,13 @@ public static class Tokens
         /// <summary>12</summary>
         public const double Base = 12;
 
+        /// <summary>14 — the stat-strip gap.</summary>
+        public const double Grid = 14;
+
         /// <summary>16</summary>
         public const double Roomy = 16;
 
-        /// <summary>20</summary>
+        /// <summary>20 — card padding in the app (<c>.sg-stat</c> 18/20).</summary>
         public const double Card = 20;
 
         /// <summary>24</summary>
@@ -267,73 +357,93 @@ public static class Tokens
         /// <summary>32</summary>
         public const double Section = 32;
 
-        /// <summary>40</summary>
-        public const double Page = 40;
+        /// <summary>56 — empty-state vertical padding.</summary>
+        public const double Empty = 56;
     }
 
-    /// <summary>The crispness scale: card 12, inner 10, control 8, pill 99.</summary>
+    /// <summary>The app's radius scale: 8 / 10 / 12, and the pill.</summary>
     public static class Radius
     {
-        /// <summary>Chips, fields, badges with corners, small buttons.</summary>
+        /// <summary>Chips and small controls. <c>--radius-sm</c>.</summary>
         public const double Control = 8;
 
-        /// <summary>Inner panels and nested boxes.</summary>
+        /// <summary>Inner panels. <c>--radius-md</c>.</summary>
         public const double Inner = 10;
 
-        /// <summary>Cards.</summary>
+        /// <summary>Cards and inputs. <c>--radius-lg</c>.</summary>
         public const double Card = 12;
 
-        /// <summary>Pills and toggles.</summary>
-        public const double Pill = 99;
+        /// <summary>Buttons, badges, nav pills, switches.</summary>
+        public const double Pill = 999;
 
         /// <summary>Listening bars.</summary>
-        public const double Bar = 3;
+        public const double Bar = 2;
     }
 
     /// <summary>Line weights.</summary>
     public static class Border
     {
-        /// <summary>Card and field borders.</summary>
+        /// <summary>Every border in the system.</summary>
         public const double Hairline = 1;
 
-        /// <summary>Focus ring.</summary>
-        public const double Ring = 2;
+        /// <summary>Focus ring width. <c>0 0 0 3px</c>.</summary>
+        public const double Ring = 3;
     }
 
-    /// <summary>
-    /// Soft, layered, low-opacity. Cards sit at <see cref="Card"/> and lift on hover.
-    /// </summary>
+    /// <summary>The shadows, each copied from its CSS declaration.</summary>
     public static class Shadow
     {
-        /// <summary>Floating panels, popups.</summary>
-        public static BoxShadows Soft => Layered((1, 2, 0.03), (4, 16, 0.04), (12, 32, 0.03));
+        /// <summary><c>--sg-surface-shadow</c>: the card at rest. Tight, three layers.</summary>
+        public static BoxShadows Card => new(
+            Layer(2, 4, 0x0F172A, 0.035),
+            [Layer(1, 2, 0x0F172A, 0.05), Layer(0, 1, 0x0F172A, 0.045)]);
 
-        /// <summary>Standard card.</summary>
-        public static BoxShadows Card => Layered((1, 2, 0.03), (4, 12, 0.04), (12, 28, 0.04));
+        /// <summary><c>.sg-card:hover</c>.</summary>
+        public static BoxShadows CardHover => new(
+            Layer(2, 4, 0x0F172A, 0.055),
+            [Layer(6, 8, 0x6874B4, 0.075), Layer(0, 1, 0x0F172A, 0.05)]);
 
-        /// <summary>Hovered card, modal.</summary>
-        public static BoxShadows Lift => Layered((2, 8, 0.04), (8, 24, 0.06), (20, 48, 0.06));
+        /// <summary><c>--shadow-lift</c>: floating surfaces, the overlay.</summary>
+        public static BoxShadows Lift => new(
+            Layer(2, 8, 0x6874B4, 0.06),
+            [Layer(8, 24, 0x6874B4, 0.08), Layer(20, 48, 0x32326E, 0.06)]);
 
-        /// <summary>The primary button's brand-tinted shadow.</summary>
-        public static BoxShadows Primary => new(
-            new BoxShadow { OffsetY = 2, Blur = 8, Color = Color.FromArgb((byte)(0.28 * 255), 0x3D, 0x47, 0x85) },
-            [new BoxShadow { OffsetY = 1, Blur = 2, Color = Color.FromArgb((byte)(0.16 * 255), 0x3D, 0x47, 0x85) }]);
+        /// <summary><c>.sg-empty</c>.</summary>
+        public static BoxShadows Empty => new(
+            Layer(1, 2, 0x1A1D2E, 0.04),
+            [Layer(6, 18, 0x6874B4, 0.06), Layer(24, 56, 0x32326E, 0.05)]);
+
+        /// <summary><c>.sg-btn-brand</c>, <c>.me-btn-ghost</c>: one hairline shadow.</summary>
+        public static BoxShadows Button => new(Layer(1, 2, 0x0F172A, 0.06));
+
+        /// <summary><c>PILL_NAV_ACTIVE_LIFT</c>: keyline plus a whisper of shadow.</summary>
+        public static BoxShadows NavActive => new(
+            new BoxShadow { Spread = 1, Color = Color.FromArgb((byte)(0.04 * 255), 0x0F, 0x17, 0x2A) },
+            [Layer(1, 2, 0x0F172A, 0.04)]);
+
+        /// <summary>The site's <c>.button</c> ramp at rest.</summary>
+        public static BoxShadows Hero => new(
+            Layer(1, 2, 0x3D4785, 0.22),
+            [Layer(4, 10, 0x3D4785, 0.18), Layer(12, 28, 0x3D4785, 0.18)]);
+
+        /// <summary>The site's <c>.button:hover</c> ramp, on ink.</summary>
+        public static BoxShadows HeroHover => new(
+            Layer(1, 2, 0x1A1D2E, 0.24),
+            [Layer(6, 14, 0x1A1D2E, 0.20), Layer(18, 40, 0x1A1D2E, 0.20)]);
+
+        /// <summary>The site's <c>.button:active</c>, collapsed.</summary>
+        public static BoxShadows HeroPressed => new(
+            Layer(1, 2, 0x1A1D2E, 0.22),
+            [Layer(2, 5, 0x1A1D2E, 0.16)]);
 
         /// <summary>No shadow.</summary>
         public static BoxShadows None => default;
 
-        private static BoxShadows Layered(params (double OffsetY, double Blur, double Opacity)[] layers)
+        private static BoxShadow Layer(double offsetY, double blur, uint rgb, double opacity) => new()
         {
-            var first = ToShadow(layers[0]);
-            var rest = layers.Skip(1).Select(ToShadow).ToArray();
-            return new BoxShadows(first, rest);
-        }
-
-        private static BoxShadow ToShadow((double OffsetY, double Blur, double Opacity) l) => new()
-        {
-            OffsetY = l.OffsetY,
-            Blur = l.Blur,
-            Color = Color.FromArgb((byte)(l.Opacity * 255), 0, 0, 0),
+            OffsetY = offsetY,
+            Blur = blur,
+            Color = Color.FromArgb((byte)(opacity * 255), (byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF)),
         };
     }
 
@@ -354,101 +464,134 @@ public static class Tokens
         /// <summary>Smallest main window height.</summary>
         public const double MainMinHeight = 480;
 
-        /// <summary>Settings dialog width.</summary>
+        /// <summary>Settings sheet width.</summary>
         public const double SettingsWidth = 560;
 
-        /// <summary>Dictionary editor and About width.</summary>
+        /// <summary>Editor and About width.</summary>
         public const double DialogWidth = 460;
 
-        /// <summary>Content column max width, so text lines stay readable on a wide window.</summary>
+        /// <summary>Reading column width, in the spirit of <c>--sg-page-read</c> at desktop scale.</summary>
         public const double ContentMaxWidth = 760;
 
-        /// <summary>The caption strip that replaces the OS title bar.</summary>
-        public const double CaptionHeight = 44;
+        /// <summary>The caption strip.</summary>
+        public const double CaptionHeight = 52;
 
         /// <summary>Caption glyph buttons.</summary>
         public const double CaptionButton = 28;
 
-        /// <summary>Standard button height.</summary>
-        public const double ButtonHeight = 36;
+        /// <summary>Primary and ghost pill height: 9px padding around 13px text.</summary>
+        public const double ButtonHeight = 34;
 
-        /// <summary>Compact button height, for row actions.</summary>
+        /// <summary>Compact pill height: the kit's <c>h-7</c>.</summary>
         public const double ButtonHeightSmall = 28;
 
-        /// <summary>Text field height.</summary>
-        public const double FieldHeight = 38;
+        /// <summary>The hero (record) pill, the site's <c>.button</c> scale.</summary>
+        public const double HeroButtonHeight = 44;
 
-        /// <summary>Toggle switch width.</summary>
-        public const double SwitchWidth = 38;
+        /// <summary>Primary pill horizontal padding. <c>9px 18px</c>.</summary>
+        public const double ButtonPadX = 18;
 
-        /// <summary>Toggle switch height.</summary>
-        public const double SwitchHeight = 22;
+        /// <summary>Compact pill horizontal padding. <c>8px 14px</c>.</summary>
+        public const double ButtonPadXSmall = 14;
+
+        /// <summary>Hero pill horizontal padding.</summary>
+        public const double HeroPadX = 24;
+
+        /// <summary>Kit input height. <c>h-8</c>.</summary>
+        public const double FieldHeight = 34;
+
+        /// <summary>Kit input horizontal padding. <c>px-2.5</c>.</summary>
+        public const double FieldPadX = 10;
+
+        /// <summary>Nav pill height. <c>h-8</c>.</summary>
+        public const double NavPillHeight = 30;
+
+        /// <summary>Nav pill horizontal padding. <c>px-3.5</c>.</summary>
+        public const double NavPillPadX = 14;
+
+        /// <summary>Switch width. Kit default 32.</summary>
+        public const double SwitchWidth = 32;
+
+        /// <summary>Switch height. Kit default 18.4.</summary>
+        public const double SwitchHeight = 18;
 
         /// <summary>Status dot diameter.</summary>
         public const double Dot = 8;
 
-        /// <summary>Listening bars: count on the main card.</summary>
-        public const int BarsCount = 28;
+        /// <summary>Listening bars on the main card.</summary>
+        public const int BarsCount = 32;
 
-        /// <summary>Listening bars: count on the overlay.</summary>
-        public const int BarsCountSmall = 12;
+        /// <summary>Listening bars on the overlay.</summary>
+        public const int BarsCountSmall = 14;
 
-        /// <summary>Listening bars: width of one bar.</summary>
-        public const double BarWidth = 4;
+        /// <summary>One bar's width.</summary>
+        public const double BarWidth = 3;
 
-        /// <summary>Listening bars: gap.</summary>
-        public const double BarGap = 4;
+        /// <summary>Gap between bars.</summary>
+        public const double BarGap = 3;
 
-        /// <summary>Listening bars: height of the field on the main card.</summary>
-        public const double BarsHeight = 56;
+        /// <summary>Bar field height on the main card.</summary>
+        public const double BarsHeight = 48;
 
-        /// <summary>Listening bars: height on the overlay.</summary>
-        public const double BarsHeightSmall = 26;
+        /// <summary>Bar field height on the overlay.</summary>
+        public const double BarsHeightSmall = 22;
 
-        /// <summary>Listening bars: minimum bar height, as a fraction of the field.</summary>
-        public const double BarMinFraction = 0.12;
+        /// <summary>Minimum bar height as a fraction of the field.</summary>
+        public const double BarMinFraction = 0.10;
 
-        /// <summary>The overlay pill.</summary>
-        public const double OverlayWidth = 260;
+        /// <summary>Overlay pill height.</summary>
+        public const double OverlayHeight = 48;
 
-        /// <summary>Overlay height.</summary>
-        public const double OverlayHeight = 56;
+        /// <summary>Room around the overlay pill for its shadow.</summary>
+        public const double OverlayShadowRoom = 28;
 
-        /// <summary>Distance of the overlay from the bottom of the screen.</summary>
-        public const double OverlayBottomMargin = 56;
+        /// <summary>Distance of the overlay from the bottom of the work area.</summary>
+        public const double OverlayBottomMargin = 48;
 
-        /// <summary>Gauge height for the model download.</summary>
+        /// <summary>Download gauge height.</summary>
         public const double GaugeHeight = 6;
 
-        /// <summary>Widest a helper paragraph runs.</summary>
-        public const double NoteMaxWidth = 440;
+        /// <summary>The logo tile in the caption.</summary>
+        public const double LogoTile = 26;
 
-        /// <summary>Width of the logo tile in the header.</summary>
-        public const double LogoTile = 28;
+        /// <summary>Horizontal room a scrolling list keeps for its cards' shadows.</summary>
+        public const double ScrollGutter = 8;
     }
 
     // ---- Motion ----
 
-    /// <summary>Quick and quiet. Buttons press with a scale, cards lift, bars ease.</summary>
+    /// <summary>Two easings, as the site declares: expo-out for travel, and quick fades.</summary>
     public static class Motion
     {
-        /// <summary>Hover and press transitions.</summary>
+        /// <summary>Hover fades. <c>0.15s</c>.</summary>
         public static TimeSpan Quick { get; } = TimeSpan.FromMilliseconds(150);
 
-        /// <summary>Card lift.</summary>
-        public static TimeSpan Lift { get; } = TimeSpan.FromMilliseconds(220);
+        /// <summary>Card lift. <c>0.24s</c>.</summary>
+        public static TimeSpan Lift { get; } = TimeSpan.FromMilliseconds(240);
+
+        /// <summary>The site button's travel. <c>0.4s</c>.</summary>
+        public static TimeSpan Travel { get; } = TimeSpan.FromMilliseconds(400);
+
+        /// <summary>The site button's press. <c>0.08s</c>.</summary>
+        public static TimeSpan Press { get; } = TimeSpan.FromMilliseconds(80);
 
         /// <summary>How often the panel polls the engine.</summary>
         public static TimeSpan PanelPoll { get; } = TimeSpan.FromMilliseconds(50);
 
-        /// <summary>One frame of bar animation.</summary>
+        /// <summary>One animation frame.</summary>
         public static TimeSpan Frame { get; } = TimeSpan.FromMilliseconds(16);
 
         /// <summary>How long "Copied" stays on a button.</summary>
         public static TimeSpan Confirmation { get; } = TimeSpan.FromMilliseconds(1400);
 
-        /// <summary>Button press scale, as the brand's global rule.</summary>
-        public const double PressScale = 0.93;
+        /// <summary>Hover lift of a card, in pixels. <c>translateY(-1px)</c>.</summary>
+        public const double CardLift = 1;
+
+        /// <summary>Hover lift of the hero button. <c>translateY(-2px)</c>.</summary>
+        public const double HeroLift = 2;
+
+        /// <summary>Press travel of any button. <c>translate-y-px</c>.</summary>
+        public const double PressTravel = 1;
 
         /// <summary>How fast a bar rises toward the level, per frame.</summary>
         public const double BarAttack = 0.45;
@@ -456,7 +599,7 @@ public static class Tokens
         /// <summary>How fast a bar falls, per frame.</summary>
         public const double BarRelease = 0.12;
 
-        /// <summary>Idle bars breathe at this fraction of the field.</summary>
-        public const double BarIdleBreath = 0.06;
+        /// <summary>Idle breath of the bars as a fraction of the field.</summary>
+        public const double BarIdleBreath = 0.05;
     }
 }

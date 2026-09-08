@@ -151,6 +151,16 @@ public interface IWindowTweaks
     /// </remarks>
     /// <param name="handle">The platform window handle.</param>
     void MakeNonActivating(nint handle);
+
+    /// <summary>
+    /// The centre of the window the user is working in, in screen pixels, or null.
+    /// </summary>
+    /// <remarks>
+    /// The overlay must appear on the monitor where the text is going, which is the one
+    /// holding the foreground window — not the primary monitor, and not wherever the app's
+    /// own window happens to be.
+    /// </remarks>
+    (int X, int Y)? ActiveWindowCentre();
 }
 
 /// <summary>

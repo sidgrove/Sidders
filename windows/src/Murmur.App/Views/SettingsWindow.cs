@@ -56,7 +56,7 @@ public sealed class SettingsWindow : ShellWindow
         SizeToContent = SizeToContent.Height;
         // Never taller than the screen: a dialog that runs off the bottom hides its own
         // footer and cannot be scrolled.
-        MaxHeight = (Screens.Primary?.WorkingArea.Height ?? 900) / (Screens.Primary?.Scaling ?? 1) - Tokens.Space.Page * 2;
+        MaxHeight = (Screens.Primary?.WorkingArea.Height ?? 900) / (Screens.Primary?.Scaling ?? 1) - Tokens.Space.Empty * 2;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
@@ -64,7 +64,7 @@ public sealed class SettingsWindow : ShellWindow
         _keys.Selected += (_, i) => SelectKey(Keys[i].Key, Keys[i].Warning);
         _keyWarningText = Text.Body(string.Empty);
         _keyWarningText.Foreground = Tokens.Brushes.Amber;
-        _keyWarning = Card.Notice(_keyWarningText, Tokens.Brushes.AmberLight, new Avalonia.Media.SolidColorBrush(Tokens.Colors.AmberMid, Tokens.Opacity.Ring));
+        _keyWarning = Card.Notice(_keyWarningText, Tokens.Brushes.AmberLight, new Avalonia.Media.SolidColorBrush(Tokens.Colors.AmberMid, Tokens.Opacity.FocusBorder));
         _keyWarning.IsVisible = false;
 
         _modelDot = new StatusDot { VerticalAlignment = VerticalAlignment.Center };
