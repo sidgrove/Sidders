@@ -160,6 +160,15 @@ public sealed class PushToTalkHook : IHotkeySource
     public PushToTalkKey Key { get; set; } = PushToTalkKey.RightControl;
 
     /// <inheritdoc />
+    /// <remarks>Any virtual key, not only the named ones: a user may record whatever they
+    /// like in Settings. Read on every event, so a change applies to the next press.</remarks>
+    public int VirtualKey
+    {
+        get => (int)Key;
+        set => Key = (PushToTalkKey)value;
+    }
+
+    /// <inheritdoc />
     public event EventHandler? Pressed;
 
     /// <inheritdoc />

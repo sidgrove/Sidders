@@ -110,6 +110,7 @@ public sealed class Composition : IAsyncDisposable
                 DropSingleSentenceFullStop = settings.Data.DropSingleSentenceFullStop,
                 TapToToggle = settings.Data.TapToToggle,
                 AiCleanup = settings.Data.AiCleanup,
+                IsEnabled = settings.Data.IsEnabled,
                 // Key and model are read per call, so pasting a key into Settings works at once.
                 Cleaner = new GeminiCleaner(() => settings.Data.GeminiApiKey, settings.Data.GeminiModel),
             };
@@ -120,6 +121,8 @@ public sealed class Composition : IAsyncDisposable
                 engine.DropSingleSentenceFullStop = settings.Data.DropSingleSentenceFullStop;
                 engine.TapToToggle = settings.Data.TapToToggle;
                 engine.AiCleanup = settings.Data.AiCleanup;
+                engine.IsEnabled = settings.Data.IsEnabled;
+                if (engine.HotkeyVirtualKey != settings.Data.PushToTalkKey) engine.HotkeyVirtualKey = settings.Data.PushToTalkKey;
                 if (engine.Cleaner?.Name != (string.IsNullOrWhiteSpace(settings.Data.GeminiModel) ? GeminiCleaner.DefaultModel : settings.Data.GeminiModel.Trim()))
                 {
                     (engine.Cleaner as IDisposable)?.Dispose();

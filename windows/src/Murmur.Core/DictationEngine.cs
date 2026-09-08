@@ -98,6 +98,19 @@ public sealed class DictationEngine : IAsyncDisposable
     /// <summary>Whether <see cref="Cleaner"/> is used. Off means the raw path, always.</summary>
     public bool AiCleanup { get; set; }
 
+    /// <summary>
+    /// Whether the key does anything. Off leaves the hook installed but ignores it, so
+    /// switching back on is instant and nothing is re-registered.
+    /// </summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>The push-to-talk key, as a virtual-key code. Applies to the next press.</summary>
+    public int HotkeyVirtualKey
+    {
+        get => _hotkey.VirtualKey;
+        set { _hotkey.VirtualKey = value; Log.Info($"hotkey changed to 0x{value:X2}"); }
+    }
+
     /// <summary>Raised when a dictation completes and produced text.</summary>
     public event EventHandler<DictationResult>? Completed;
 
@@ -189,12 +202,14 @@ public sealed class DictationEngine : IAsyncDisposable
 
     private void OnPressed(object? sender, EventArgs e)
     {
+        if (!IsEnabled) return;
         if (TapToToggle) TogglePushToTalk();
         else _ = BeginAsync();
     }
 
     private void OnReleased(object? sender, EventArgs e)
     {
+        if (!IsEnabled && State == DictationState.Idle) return;
         if (!TapToToggle) _ = EndAsync();
     }
 

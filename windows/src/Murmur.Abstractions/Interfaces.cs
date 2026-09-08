@@ -78,6 +78,9 @@ public interface IHotkeySource : IDisposable
     /// <summary>The key was released.</summary>
     event EventHandler? Released;
 
+    /// <summary>The virtual-key code being watched. Read on every event, so a change applies to the next press.</summary>
+    int VirtualKey { get; set; }
+
     /// <summary>Begins listening.</summary>
     /// <returns>False if the hook could not be installed.</returns>
     bool Start();

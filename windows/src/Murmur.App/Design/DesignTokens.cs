@@ -358,7 +358,7 @@ public static class Tokens
         public const double Nav = 15;
 
         /// <summary>The wordmark, DM Sans bold, tight.</summary>
-        public const double Wordmark = 22;
+        public const double Wordmark = 26;
 
         /// <summary>Eyebrow tracking, 0.14em at 10.5px.</summary>
         public const double EyebrowTracking = 1.47;
@@ -617,7 +617,7 @@ public static class Tokens
         public const double GaugeHeight = 6;
 
         /// <summary>The logo tile in the caption.</summary>
-        public const double LogoTile = 26;
+        public const double LogoTile = 22;
 
         /// <summary>Hero grid pitch. <c>.grid-pattern</c> 56px.</summary>
         public const double GridPitch = 56;

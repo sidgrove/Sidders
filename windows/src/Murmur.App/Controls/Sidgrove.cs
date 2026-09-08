@@ -1016,19 +1016,29 @@ public sealed class NavLink : Button
     }
 }
 
-/// <summary>The wordmark: DM Sans bold, tight, as the site's logo reads.</summary>
+/// <summary>The wordmark: the slash-dot mark, then the name in Very Vogue.</summary>
 public static class Wordmark
 {
     /// <summary>Creates the wordmark.</summary>
-    public static TextBlock Make(string text) => new()
+    public static StackPanel Make(string text) => new()
     {
-        Text = text,
-        FontFamily = Tokens.Fonts.Sans,
-        FontSize = Tokens.Fonts.Wordmark,
-        FontWeight = FontWeight.Bold,
-        LetterSpacing = Tokens.Fonts.HeadingTracking * 1.5,
-        Foreground = Tokens.Brushes.Ink,
+        Orientation = Orientation.Horizontal,
+        Spacing = Tokens.Space.Snug,
         VerticalAlignment = VerticalAlignment.Center,
+        Children =
+        {
+            new LogoMark { VerticalAlignment = VerticalAlignment.Center },
+            new TextBlock
+            {
+                Text = text,
+                FontFamily = Tokens.Fonts.Serif,
+                FontSize = Tokens.Fonts.Wordmark,
+                FontWeight = FontWeight.Normal,
+                LetterSpacing = Tokens.Fonts.TitleTracking * (Tokens.Fonts.Wordmark / Tokens.Fonts.Title),
+                Foreground = Tokens.Brushes.Ink,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        },
     };
 }
 

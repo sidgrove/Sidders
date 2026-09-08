@@ -173,6 +173,7 @@ public sealed class FaultTests
     {
         public event EventHandler? Pressed { add { } remove { } }
         public event EventHandler? Released { add { } remove { } }
+        public int VirtualKey { get; set; }
         public bool Start() => false;
         public void StopListening() { }
         public void Dispose() { }

@@ -87,6 +87,9 @@ public sealed class FakeHotkeySource : IHotkeySource
     /// <inheritdoc />
     public event EventHandler? Released;
 
+    /// <inheritdoc />
+    public int VirtualKey { get; set; } = 0xA3;
+
     /// <summary>Whether <see cref="Start"/> has been called.</summary>
     public bool IsRunning { get; private set; }
 

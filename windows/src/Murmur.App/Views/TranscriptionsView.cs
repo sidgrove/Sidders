@@ -46,8 +46,8 @@ public sealed class TranscriptionsView : UserControl
                 Panels.Docked(Gutter(Panels.Split(new Badge("Recent"), _search)), Dock.Top),
                 Panels.Docked(Gutter(Panels.Split(_count, clear)), Dock.Bottom),
                 // Padding inside the scroll viewer, not margin outside it: the viewer clips to its
-                // bounds, and without room the cards' shadows are cut off at the sides.
-                new ScrollViewer { Content = _list, Padding = new Thickness(Tokens.Layout.ScrollGutter, 0) },
+                // bounds, and without room the cards' shadows are cut off.
+                new ScrollViewer { Content = _list, Padding = new Thickness(Tokens.Layout.ScrollGutter * 2, 0, Tokens.Layout.ScrollGutter * 2, Tokens.Layout.ScrollGutter * 3) },
             },
         };
 
@@ -59,7 +59,7 @@ public sealed class TranscriptionsView : UserControl
 
     private static Control Gutter(Control control)
     {
-        control.Margin = new Thickness(Tokens.Layout.ScrollGutter, 0);
+        control.Margin = new Thickness(Tokens.Layout.ScrollGutter * 2, 0);
         return control;
     }
 

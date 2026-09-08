@@ -37,6 +37,8 @@ public sealed class MainWindow : ShellWindow
     private readonly TextBlock _faultText;
     private readonly DispatcherTimer _poll;
     private readonly OverlayWindow? _overlay;
+    private Controls.Switch? _enabled;
+    private TextBlock? _enabledLabel;
 
     private TranscriptionsView? _transcriptionsView;
     private DictionaryView? _dictionaryView;
@@ -124,18 +126,23 @@ public sealed class MainWindow : ShellWindow
 
     private Border BuildBody()
     {
-        var body = new DockPanel();
+        var body = new DockPanel { ClipToBounds = false };
         body.Children.Add(Panels.Docked(BuildHero(), Dock.Top));
         body.Children.Add(Panels.Docked(_fault, Dock.Top));
         body.Children.Add(_sectionHost);
-        return new Border { Child = body, Padding = new Thickness(Tokens.Space.Section, 0, Tokens.Space.Section, Tokens.Space.Wide) };
+        return new Border { Child = body, ClipToBounds = false, Padding = new Thickness(Tokens.Space.Section, 0, Tokens.Space.Section, Tokens.Space.Wide) };
     }
 
     /// <summary>The hero: badge, headline, subtitle, the pill; and the readout card beside it.</summary>
     private Grid BuildHero()
     {
+        _enabled = new Controls.Switch { IsChecked = _composition?.Settings.Data.IsEnabled ?? true, VerticalAlignment = VerticalAlignment.Center };
+        _enabled.IsCheckedChanged += (_, _) => SetEnabled(_enabled.IsChecked == true);
+        var badgeRow = Panels.Row(Tokens.Space.Base, _badge, _enabled, MonoLabel.Make("On"));
+        _enabledLabel = (TextBlock)badgeRow.Children[2];
+
         var copy = Panels.Column(Tokens.Space.Roomy,
-            _badge,
+            badgeRow,
             Panels.Column(0, _headline, _accent),
             _subtitle,
             _record);
@@ -148,13 +155,14 @@ public sealed class MainWindow : ShellWindow
             _counter,
             _bars), Tokens.Space.Wide);
         readout.CornerRadius = new CornerRadius(Tokens.Radius.CardLarge);
-        readout.BoxShadow = Tokens.Shadow.Lift;
+        readout.BoxShadow = Tokens.Shadow.Soft;
         readout.BorderBrush = Tokens.Brushes.Line;
         readout.VerticalAlignment = VerticalAlignment.Center;
         readout.MinWidth = Tokens.Layout.BarsCount * (Tokens.Layout.BarWidth + Tokens.Layout.BarGap) + Tokens.Space.Wide * 2;
 
         var hero = new Grid
         {
+            ClipToBounds = false,
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
             Margin = new Thickness(Tokens.Layout.ScrollGutter, Tokens.Space.Wide, Tokens.Layout.ScrollGutter, Tokens.Space.Section),
         };
@@ -264,15 +272,7 @@ public sealed class MainWindow : ShellWindow
         }
     }
 
-    private string KeyName => _composition?.Settings.Data.PushToTalkKey switch
-    {
-        0xA3 => "Right Ctrl",
-        0xA1 => "Right Shift",
-        0x14 => "Caps Lock",
-        0x7C => "F13",
-        0xA5 => "Right Alt",
-        _ => "the key",
-    };
+    private string KeyName => KeyNames.Describe(_composition?.Settings.Data.PushToTalkKey ?? 0xA3);
 
     /// <summary>The idle subtitle: which key, which mode, whether AI is on.</summary>
     private void RefreshHint()
@@ -323,8 +323,32 @@ public sealed class MainWindow : ShellWindow
         }
     }
 
+    /// <summary>Pauses or resumes the key without quitting.</summary>
+    private void SetEnabled(bool on)
+    {
+        if (_enabledLabel is not null) _enabledLabel.Text = on ? "ON" : "OFF";
+        if (_composition is not null && _composition.Settings.Data.IsEnabled != on)
+        {
+            _composition.Settings.Update(_composition.Settings.Data with { IsEnabled = on });
+        }
+        _lastState = string.Empty;
+        SetState(recording: false, transcribing: false);
+    }
+
     private void SetState(bool recording, bool transcribing)
     {
+        var off = _composition is not null && !_composition.Settings.Data.IsEnabled;
+        if (off && !recording && !transcribing)
+        {
+            _badge.Set("Off", Tokens.Brushes.Faint, live: false);
+            _headline.Text = "Paused,";
+            _accent.Text = "the key does nothing.";
+            _readoutLabel.Text = "OFF";
+            _recordLabel.Text = "Start recording";
+            _coin.IsStop = false;
+            return;
+        }
+
         if (recording)
         {
             _badge.Set("Listening", Tokens.Brushes.Rose, live: true);

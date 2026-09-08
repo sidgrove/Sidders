@@ -17,19 +17,29 @@ namespace Murmur.App.Views;
     Justification = "The token source lives for one download and is disposed in that download's finally; a Window has its own lifecycle and OnClosed cancels any download in flight.")]
 public sealed class SettingsWindow : ShellWindow
 {
-    /// <summary>The keys offered, in recommendation order.</summary>
-    private static readonly (int Key, string Label, string? Warning)[] Keys =
+    /// <summary>Quick picks, in recommendation order. Any other key can be recorded.</summary>
+    private static readonly (int Key, string Label)[] Keys =
     [
-        (0xA3, "Right Ctrl", null),
-        (0xA1, "Right Shift", "Right Shift also fires when you type a capital with your right hand. Taps under half a second are ignored, but Right Ctrl is quieter."),
-        (0x14, "Caps Lock", null),
-        (0x7C, "F13", null),
-        (0xA5, "Right Alt", "Right Alt is AltGr on many European layouts and will interfere with typing @, €, \\ and |."),
+        (0xA3, "Right Ctrl"),
+        (0xA1, "Right Shift"),
+        (0x14, "Caps Lock"),
+        (0x7C, "F13"),
+        (0x91, "Scroll Lock"),
     ];
+
+    private static string? WarningFor(int key) => key switch
+    {
+        0xA1 => "Right Shift also fires when you type a capital with your right hand. Taps under half a second are ignored, but Right Ctrl is quieter.",
+        0xA5 => "Right Alt is AltGr on many European layouts and will interfere with typing @, €, \\ and |.",
+        _ when KeyNames.TypesACharacter(key) => $"{KeyNames.Describe(key)} also types a character. The key is passed through, so you will get that character as well as a recording.",
+        _ => null,
+    };
 
     private readonly Composition _composition;
     private readonly AppSettings _settings;
-    private readonly Segmented _keys;
+    private readonly Border _keyCapture;
+    private readonly TextBlock _keyName;
+    private bool _capturing;
     private readonly Border _keyWarning;
     private readonly TextBlock _keyWarningText;
 
@@ -60,8 +70,8 @@ public sealed class SettingsWindow : ShellWindow
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        _keys = new Segmented(Keys.Select(k => k.Label), Math.Max(0, Array.FindIndex(Keys, k => k.Key == _settings.Data.PushToTalkKey)));
-        _keys.Selected += (_, i) => SelectKey(Keys[i].Key, Keys[i].Warning);
+        _keyName = Text.BodyStrong(KeyNames.Describe(_settings.Data.PushToTalkKey));
+        _keyCapture = BuildKeyCapture();
         _keyWarningText = Text.Body(string.Empty);
         _keyWarningText.Foreground = Tokens.Brushes.Amber;
         _keyWarning = Card.Notice(_keyWarningText, Tokens.Brushes.AmberLight, new Avalonia.Media.SolidColorBrush(Tokens.Colors.AmberMid, Tokens.Opacity.FocusBorder));
@@ -89,15 +99,22 @@ public sealed class SettingsWindow : ShellWindow
         RefreshModel();
     }
 
-    private static string? WarningFor(int key) => Keys.FirstOrDefault(k => k.Key == key).Warning;
-
     private StackPanel BuildKeySection()
     {
         var mode = new Segmented(["Hold to talk", "Tap to start, tap to stop"], _settings.Data.TapToToggle ? 1 : 0);
         mode.Selected += (_, i) => { if (_settings.Data.TapToToggle != (i == 1)) Save(_settings.Data with { TapToToggle = i == 1 }); };
 
+        var picks = Panels.Row(Tokens.Space.Snug);
+        foreach (var (key, label) in Keys)
+        {
+            var pick = new SgButton(label, SgButton.Kind.Ghost, compact: true);
+            pick.Click += (_, _) => SelectKey(key, WarningFor(key));
+            picks.Children.Add(pick);
+        }
+
         return Panels.Column(Tokens.Space.Base,
-            _keys,
+            _keyCapture,
+            picks,
             _keyWarning,
             mode,
             Text.Muted("The key is passed through, never swallowed, so it can't get stuck down. Tap mode avoids the Windows Filter Keys prompt that appears when Right Shift is held for eight seconds."));
@@ -235,6 +252,10 @@ public sealed class SettingsWindow : ShellWindow
                 v => { if (!startup.SetEnabled(v)) Log.Warn("could not change start-up registration"); }));
         }
 
+        var quit = new SgButton($"Quit {AppPaths.ProductName}", SgButton.Kind.Danger);
+        quit.Click += (_, _) => App.Quit();
+        column.Children.Add(Panels.Split(Text.Muted("Closing the window keeps it running in the tray. This stops it completely."), quit));
+
         return column;
     }
 
@@ -304,13 +325,43 @@ public sealed class SettingsWindow : ShellWindow
         }
     }
 
+    /// <summary>The recorder: click, press any key, done.</summary>
+    private Border BuildKeyCapture()
+    {
+        var hint = Text.Muted("Click, then press the key you want");
+        var box = Card.Subtle(Panels.Split(Panels.Column(Tokens.Space.Hair, _keyName, hint), Pill.Brand("Record a key")), Tokens.Space.Roomy);
+        box.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+        box.Focusable = true;
+        box.PointerPressed += (_, _) =>
+        {
+            _capturing = true;
+            box.Focus();
+            box.BorderBrush = Tokens.Brushes.FocusBorder;
+            hint.Text = "Listening for a key… Escape to cancel";
+        };
+        box.KeyDown += (_, e) =>
+        {
+            if (!_capturing) return;
+            e.Handled = true;
+            _capturing = false;
+            box.BorderBrush = Tokens.Brushes.PanelBorder;
+            hint.Text = "Click, then press the key you want";
+
+            if (e.Key == Avalonia.Input.Key.Escape) return;
+            if (KeyNames.ToVirtualKey(e.Key) is { } code) SelectKey(code, WarningFor(code));
+            else hint.Text = $"{e.Key} can't be a push-to-talk key. Try another.";
+        };
+        box.LostFocus += (_, _) => { _capturing = false; box.BorderBrush = Tokens.Brushes.PanelBorder; };
+        return box;
+    }
+
     private void SelectKey(int key, string? warning, bool initial = false)
     {
         var text = warning;
+        _keyName.Text = KeyNames.Describe(key);
         if (!initial && _settings.Data.PushToTalkKey != key)
         {
             Save(_settings.Data with { PushToTalkKey = key });
-            text = (warning is null ? string.Empty : warning + " ") + $"The new key takes effect the next time {AppPaths.ProductName} starts.";
         }
 
         _keyWarningText.Text = text ?? string.Empty;

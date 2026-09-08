@@ -5,6 +5,12 @@ using System.Text.Json.Serialization;
 namespace Murmur.Core;
 
 /// <summary>User preferences.</summary>
+/// <remarks>
+/// Plain setters, not <c>init</c>: with source-generated JSON an <c>init</c> property that is
+/// absent from an older settings file came back as <c>false</c>, not its declared default —
+/// which silently switched the app off for anyone upgrading. <c>with</c> expressions work
+/// either way.
+/// </remarks>
 public sealed record SettingsData
 {
     /// <summary>
@@ -15,10 +21,10 @@ public sealed record SettingsData
     /// Right Alt is AltGr — it is how those users type <c>@</c>, <c>€</c>, <c>\</c> and
     /// <c>|</c>. Right Ctrl produces no character on any layout.
     /// </remarks>
-    public int PushToTalkKey { get; init; } = 0xA3;
+    public int PushToTalkKey { get; set; } = 0xA3;
 
     /// <summary>Where the speech model lives, or null to search the default locations.</summary>
-    public string? ModelDirectory { get; init; }
+    public string? ModelDirectory { get; set; }
 
     /// <summary>
     /// The microphone to record from, as an OS device id, or null for the system's default
@@ -28,19 +34,19 @@ public sealed record SettingsData
     /// Read on every recording rather than once at startup, so picking a different
     /// microphone in Settings takes effect on the next key press.
     /// </remarks>
-    public string? MicrophoneDeviceId { get; init; }
+    public string? MicrophoneDeviceId { get; set; }
 
     /// <summary>Whether to type the transcript into the focused app.</summary>
-    public bool InjectText { get; init; } = true;
+    public bool InjectText { get; set; } = true;
 
     /// <summary>Whether to keep a transcript history.</summary>
-    public bool KeepHistory { get; init; } = true;
+    public bool KeepHistory { get; set; } = true;
 
     /// <summary>
     /// Whether a lone sentence loses its trailing full stop. See
     /// <see cref="TranscriptPolish.DropTrailingFullStopIfSingleSentence"/>.
     /// </summary>
-    public bool DropSingleSentenceFullStop { get; init; } = true;
+    public bool DropSingleSentenceFullStop { get; set; } = true;
 
     /// <summary>
     /// Tap the key once to start and once to stop, instead of holding it.
@@ -50,16 +56,19 @@ public sealed record SettingsData
     /// seconds on Right Shift opens the Filter Keys prompt, five taps opens Sticky Keys.
     /// Tap-to-toggle sidesteps the first entirely.
     /// </remarks>
-    public bool TapToToggle { get; init; }
+    public bool TapToToggle { get; set; }
 
     /// <summary>Whether transcripts go through the generative clean-up before typing.</summary>
-    public bool AiCleanup { get; init; }
+    public bool AiCleanup { get; set; }
 
     /// <summary>Gemini API key, or null to use the <c>GEMINI_API_KEY</c> environment variable.</summary>
-    public string? GeminiApiKey { get; init; }
+    public string? GeminiApiKey { get; set; }
 
     /// <summary>Gemini model id, or null for the default.</summary>
-    public string? GeminiModel { get; init; }
+    public string? GeminiModel { get; set; }
+
+    /// <summary>Whether the push-to-talk key does anything. Off pauses the app without quitting.</summary>
+    public bool IsEnabled { get; set; } = true;
 }
 
 /// <summary>Settings, persisted as JSON.</summary>
