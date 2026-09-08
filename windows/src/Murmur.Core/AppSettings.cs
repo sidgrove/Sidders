@@ -35,6 +35,12 @@ public sealed record SettingsData
 
     /// <summary>Whether to keep a transcript history.</summary>
     public bool KeepHistory { get; init; } = true;
+
+    /// <summary>
+    /// Whether a lone sentence loses its trailing full stop. See
+    /// <see cref="TranscriptPolish.DropTrailingFullStopIfSingleSentence"/>.
+    /// </summary>
+    public bool DropSingleSentenceFullStop { get; init; } = true;
 }
 
 /// <summary>Settings, persisted as JSON.</summary>

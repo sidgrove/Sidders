@@ -119,6 +119,9 @@ public sealed class SettingsWindow : UnitWindow
                     v => Save(_settings.Data with { InjectText = v })),
                 Toggle("Keep a transcript history", _settings.Data.KeepHistory,
                     v => Save(_settings.Data with { KeepHistory = v })),
+                Toggle("Drop the full stop after a single sentence (chat messages, fragments)",
+                    _settings.Data.DropSingleSentenceFullStop,
+                    v => Save(_settings.Data with { DropSingleSentenceFullStop = v })),
             },
         };
 

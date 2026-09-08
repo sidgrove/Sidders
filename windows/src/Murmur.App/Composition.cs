@@ -107,9 +107,14 @@ public sealed class Composition : IAsyncDisposable
                 () => dictionary.Entries)
             {
                 InjectText = settings.Data.InjectText,
+                DropSingleSentenceFullStop = settings.Data.DropSingleSentenceFullStop,
             };
 
-            settings.Changed += (_, _) => engine.InjectText = settings.Data.InjectText;
+            settings.Changed += (_, _) =>
+            {
+                engine.InjectText = settings.Data.InjectText;
+                engine.DropSingleSentenceFullStop = settings.Data.DropSingleSentenceFullStop;
+            };
 
             engine.Completed += (_, result) =>
             {

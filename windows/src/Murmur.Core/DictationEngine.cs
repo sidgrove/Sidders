@@ -83,6 +83,9 @@ public sealed class DictationEngine : IAsyncDisposable
     /// <summary>Whether text should be typed into the focused app after a dictation.</summary>
     public bool InjectText { get; set; } = true;
 
+    /// <summary>Whether a lone sentence loses its trailing full stop before typing.</summary>
+    public bool DropSingleSentenceFullStop { get; set; } = true;
+
     /// <summary>Raised when a dictation completes and produced text.</summary>
     public event EventHandler<DictationResult>? Completed;
 
@@ -362,7 +365,11 @@ public sealed class DictationEngine : IAsyncDisposable
 
         // The dictionary runs last and unconditionally. Biasing only raises the odds of the
         // right word; this is the pass that guarantees it.
-        var (corrected, applied) = new DictionaryCorrector(entries).Apply(raw);
+        var (dictionaryText, applied) = new DictionaryCorrector(entries).Apply(raw);
+
+        // Polish runs after the dictionary so a correction that ends a sentence is
+        // treated the same as one the engine produced itself.
+        var corrected = TranscriptPolish.Apply(dictionaryText, DropSingleSentenceFullStop);
 
         var result = new DictationResult(
             At: releasedAt,
