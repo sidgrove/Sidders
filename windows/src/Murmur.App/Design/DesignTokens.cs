@@ -348,8 +348,11 @@ public static class Tokens
         /// <summary>The hero headline in Very Vogue, at app scale. Site h1 is 48–78px.</summary>
         public const double Headline = 46;
 
-        /// <summary>Headline line height, <c>1.06</c>.</summary>
-        public const double HeadlineLineHeight = 49;
+        /// <summary>
+        /// Headline line height. Very Vogue's ascenders and descenders overshoot its em box,
+        /// so anything tighter than <c>1.2</c> crops the glyphs.
+        /// </summary>
+        public const double HeadlineLineHeight = 56;
 
         /// <summary>The hero subtitle. Site <c>.subtitle</c> 1.125rem.</summary>
         public const double Subtitle = 16;
@@ -517,6 +520,9 @@ public static class Tokens
     /// <summary>Window and control dimensions.</summary>
     public static class Layout
     {
+        /// <summary>The white margin between the window edge and the rounded wash panel.</summary>
+        public const double PanelInset = 10;
+
         /// <summary>Initial main window width.</summary>
         public const double MainWidth = 880;
 

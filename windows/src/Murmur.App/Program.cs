@@ -28,6 +28,11 @@ public static class Program
 
         App.StartMinimized = args.Contains(App.MinimizedArgument, StringComparer.OrdinalIgnoreCase);
 
+        // Two copies would both hook the keyboard and both open the transcript log, and the
+        // second one loses the file. One per user session; a second launch simply exits.
+        using var single = new Mutex(initiallyOwned: true, $"Local\\{Murmur.Abstractions.AppPaths.ProductName}.SingleInstance", out var first);
+        if (!first) return 0;
+
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 

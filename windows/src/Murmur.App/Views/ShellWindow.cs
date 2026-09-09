@@ -25,7 +25,7 @@ public abstract class ShellWindow : Window
     /// <summary>Configures the chrome. Call before setting content.</summary>
     protected ShellWindow()
     {
-        Background = Tokens.Brushes.Wash;
+        Background = Tokens.Brushes.Card;
         ExtendClientAreaToDecorationsHint = true;
         ExtendClientAreaChromeHints = ExtendClientAreaChromeHints.NoChrome;
         ExtendClientAreaTitleBarHeightHint = Tokens.Layout.CaptionHeight;
@@ -38,13 +38,27 @@ public abstract class ShellWindow : Window
         };
     }
 
-    /// <summary>Wraps <paramref name="body"/> beneath the caption strip, on the wash.</summary>
+    /// <summary>
+    /// Wraps <paramref name="body"/> beneath the caption strip. The strip sits on plain
+    /// white; the body sits on the wash inside a rounded, hairline-edged panel with a slim
+    /// margin, so the hero is sealed off rather than running to the window edge.
+    /// </summary>
     protected Control Frame(string title, Control body, Control? trailing = null)
     {
+        var panel = new Border
+        {
+            CornerRadius = new CornerRadius(Tokens.Radius.CardLarge),
+            BorderBrush = Tokens.Brushes.Line,
+            BorderThickness = new Thickness(Tokens.Border.Hairline),
+            ClipToBounds = true,
+            Margin = new Thickness(Tokens.Layout.PanelInset, 0, Tokens.Layout.PanelInset, Tokens.Layout.PanelInset),
+            Child = new WashPanel { Child = body },
+        };
+
         var root = new DockPanel();
         root.Children.Add(Panels.Docked(BuildCaption(title, trailing), Dock.Top));
-        root.Children.Add(body);
-        return new WashPanel { Child = root };
+        root.Children.Add(panel);
+        return root;
     }
 
     private Border BuildCaption(string title, Control? trailing)
