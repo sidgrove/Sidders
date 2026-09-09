@@ -45,6 +45,15 @@ public sealed record SettingsData
     /// <summary>Whether to type the transcript into the focused app.</summary>
     public bool InjectText { get; set; } = true;
 
+    /// <summary>Terminal spoken command that presses Enter; blank disables it.</summary>
+    public string SendWord { get; set; } = "blob";
+
+    /// <summary>Comma-separated alternative words recognised only at the end of dictation.</summary>
+    public string SendWordAliases { get; set; } = string.Empty;
+
+    /// <summary>Phrase that presses Enter only when it is the entire dictation; blank disables it.</summary>
+    public string SendOnlyPhrase { get; set; } = "send it";
+
     /// <summary>Whether to keep a transcript history.</summary>
     public bool KeepHistory { get; set; } = true;
 

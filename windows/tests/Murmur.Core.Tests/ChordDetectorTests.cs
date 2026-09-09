@@ -11,7 +11,7 @@ public sealed class ChordDetectorTests
     private const int Control = 0x11;
     private const int LeftWin = 0x5B;
 
-    /// <summary>A keyboard whose physical state the test drives by hand.</summary>
+    /// <summary>Windows delivers low-level hook events before updating asynchronous key state.</summary>
     private sealed class Keyboard
     {
         private readonly HashSet<int> _down = [];
@@ -31,11 +31,35 @@ public sealed class ChordDetectorTests
             _ => _down.Contains(vk),
         };
 
-        public ChordEvent Press(int vk) { _down.Add(vk); return Detector.Feed(vk, true); }
+        public ChordEvent Press(int vk) { var result = Detector.Feed(vk, true); _down.Add(vk); return result; }
         public ChordEvent Repeat(int vk) => Detector.Feed(vk, true);
-        public ChordEvent Release(int vk) { _down.Remove(vk); return Detector.Feed(vk, false); }
+        public ChordEvent Release(int vk) { var result = Detector.Feed(vk, false); _down.Remove(vk); return result; }
     }
 
+    [Fact]
+    public void Repeated_windows_taps_while_control_is_held_each_complete_the_chord()
+    {
+        var kb = new Keyboard(LeftControl, HotkeyModifiers.Windows);
+        kb.Press(LeftControl);
+        for (var i = 0; i < 20; i++)
+        {
+            kb.Press(LeftWin).ShouldBe(ChordEvent.Pressed);
+            kb.Release(LeftWin).ShouldBe(ChordEvent.Released);
+            kb.Repeat(LeftControl).ShouldBe(ChordEvent.None);
+        }
+        kb.Release(LeftControl).ShouldBe(ChordEvent.None);
+    }
+
+    [Fact]
+    public void Events_remain_authoritative_when_async_key_state_lags()
+    {
+        var detector = new ChordDetector(_ => false)
+        { TriggerKey = LeftControl, Modifiers = (int)HotkeyModifiers.Windows };
+        detector.Feed(LeftControl, true).ShouldBe(ChordEvent.None);
+        detector.Feed(LeftWin, true).ShouldBe(ChordEvent.Pressed);
+        detector.Feed(LeftWin, false).ShouldBe(ChordEvent.Released);
+        detector.Feed(LeftControl, false).ShouldBe(ChordEvent.None);
+    }
     [Fact]
     public void Modifier_then_trigger_presses_on_the_trigger()
     {
@@ -54,8 +78,8 @@ public sealed class ChordDetectorTests
 
         kb.Press(LeftControl).ShouldBe(ChordEvent.None, "Win is not held yet");
         kb.Press(LeftWin).ShouldBe(ChordEvent.Pressed, "the chord completed on the modifier");
-        kb.Release(LeftWin).ShouldBe(ChordEvent.None, "the trigger is still held");
-        kb.Release(LeftControl).ShouldBe(ChordEvent.Released);
+        kb.Release(LeftWin).ShouldBe(ChordEvent.Released, "releasing either part breaks the chord");
+        kb.Release(LeftControl).ShouldBe(ChordEvent.None);
     }
 
     [Fact]

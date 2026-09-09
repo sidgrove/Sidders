@@ -149,6 +149,9 @@ public interface ITextInjector
     /// <summary>Inserts <paramref name="text"/> at the caret of the focused control.</summary>
     /// <returns>False if the text could not be delivered.</returns>
     ValueTask<bool> InjectAsync(string text, CancellationToken cancellationToken);
+
+    /// <summary>Presses Enter in the focused app after successful text delivery.</summary>
+    ValueTask<bool> SendAsync(CancellationToken cancellationToken) => ValueTask.FromResult(false);
 }
 
 /// <summary>Turns audio into text.</summary>
@@ -219,13 +222,11 @@ public interface IWindowTweaks
 }
 
 /// <summary>
-/// Turns every other application's playback down while the user is speaking.
+/// Mutes other applications on the current playback output while recording.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Ducks rather than mutes: a call or a video should stay intelligible while a short
-/// dictation goes in. The master volume is never touched — only the per-application
-/// sessions — so a crash mid-hold cannot leave the machine silent.
+/// Uses per-application mute and preserves volume levels. Apps already muted remain muted after restoration.
 /// </para>
 /// <para>
 /// Both calls are best-effort and must never throw; a device that cannot be reached
@@ -234,10 +235,10 @@ public interface IWindowTweaks
 /// </remarks>
 public interface IAudioDucker
 {
-    /// <summary>Lowers other applications' playback and remembers their levels.</summary>
+    /// <summary>Mutes other applications' playback and remembers their mute states.</summary>
     void Duck();
 
-    /// <summary>Puts back whatever <see cref="Duck"/> lowered.</summary>
+    /// <summary>Restores the mute states saved by <see cref="Duck"/>.</summary>
     void Restore();
 }
 

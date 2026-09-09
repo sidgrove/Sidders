@@ -76,7 +76,17 @@ function Render([int]$size, [bool]$recording) {
 
 function Write-Ico([string]$path, [int[]]$sizes, [bool]$recording) {
     $images = foreach ($sz in $sizes) {
-        $bmp = Render $sz $recording
+        if ($path.EndsWith('app.ico') -and (Test-Path (Join-Path $assets 'app-icon.png'))) {
+            $source = [System.Drawing.Image]::FromFile((Join-Path $assets 'app-icon.png'))
+            $bmp = New-Object System.Drawing.Bitmap $sz, $sz
+            $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+            $graphics.InterpolationMode = 'HighQualityBicubic'
+            $graphics.DrawImage($source, 0, 0, $sz, $sz)
+            $graphics.Dispose()
+            $source.Dispose()
+        } else {
+            $bmp = Render $sz $recording
+        }
         $ms = New-Object System.IO.MemoryStream
         $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
         $bmp.Dispose()

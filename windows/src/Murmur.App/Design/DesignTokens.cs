@@ -25,6 +25,38 @@ namespace Murmur.App.Design;
 /// </remarks>
 public static class Tokens
 {
+    /// <summary>Brief multicoloured feedback for the user-requested auto-send action.</summary>
+    public static class SendFeedback
+    {
+        /// <summary>How long the send confirmation remains visible.</summary>
+        public static TimeSpan Duration { get; } = TimeSpan.FromMilliseconds(1100);
+        /// <summary>Number of animated colour bars.</summary>
+        public const int Bars = 28;
+        /// <summary>Width of the coloured wave.</summary>
+        public const double Width = 210;
+        /// <summary>Height of the coloured wave.</summary>
+        public const double Height = 28;
+        /// <summary>Gap between bars.</summary>
+        public const double Gap = 3;
+        /// <summary>Bar corner radius.</summary>
+        public const double Radius = 3;
+        /// <summary>Minimum height relative to the wave.</summary>
+        public const double Floor = 0.2;
+        /// <summary>Phase offset between adjacent bars.</summary>
+        public const double Phase = 0.45;
+        /// <summary>Wave speed in radians per second.</summary>
+        public const double Speed = 9;
+        /// <summary>Blue, violet, pink, peach and teal wave colours.</summary>
+        public static IReadOnlyList<IBrush> Palette { get; } = new IBrush[]
+        {
+            new SolidColorBrush(Color.Parse("#5D9CEC")),
+            new SolidColorBrush(Color.Parse("#9976ED")),
+            new SolidColorBrush(Color.Parse("#DD83CD")),
+            new SolidColorBrush(Color.Parse("#F1AD85")),
+            new SolidColorBrush(Color.Parse("#58BEB5")),
+        };
+    }
+
     // ---- Colour ----
 
     /// <summary>The palette. Names follow the <c>T</c> object and the CSS variables.</summary>
@@ -218,6 +250,28 @@ public static class Tokens
         public static IBrush BarsIdle { get; } = new SolidColorBrush(Colors.BrandMid, Opacity.BarsIdle);
 
         /// <summary>The hero grid lines, brand at 6%. <c>.grid-pattern</c>.</summary>
+        /// <summary>Sidgrove's upper periwinkle bloom.</summary>
+        public static IBrush AmbientPeri { get; } = new RadialGradientBrush
+        {
+            Center = new RelativePoint(0.8, 0, RelativeUnit.Relative),
+            GradientOrigin = new RelativePoint(0.8, 0, RelativeUnit.Relative),
+            RadiusX = new RelativeScalar(0.85, RelativeUnit.Relative),
+            RadiusY = new RelativeScalar(0.55, RelativeUnit.Relative),
+            Opacity = Opacity.HeroPeri,
+            GradientStops = [new GradientStop(Colors.PeriBright, 0), new GradientStop(Avalonia.Media.Colors.Transparent, 1)],
+        };
+
+        /// <summary>Sidgrove's faint peach bloom.</summary>
+        public static IBrush AmbientPeach { get; } = new RadialGradientBrush
+        {
+            Center = new RelativePoint(0.02, 0.42, RelativeUnit.Relative),
+            GradientOrigin = new RelativePoint(0.02, 0.42, RelativeUnit.Relative),
+            RadiusX = new RelativeScalar(0.55, RelativeUnit.Relative),
+            RadiusY = new RelativeScalar(0.5, RelativeUnit.Relative),
+            Opacity = Opacity.HeroPeach,
+            GradientStops = [new GradientStop(Colors.Peach, 0), new GradientStop(Avalonia.Media.Colors.Transparent, 1)],
+        };
+        /// <summary>Fine Sidgrove grid lines.</summary>
         public static IBrush GridLine { get; } = new SolidColorBrush(Colors.Brand, Opacity.Grid);
 
         /// <summary>The nav underline. Solid peri, not the site's peri-to-peach gradient.</summary>
@@ -286,19 +340,19 @@ public static class Tokens
     public static class Fonts
     {
         /// <summary>DM Sans. Everything that is not a title or the hero number.</summary>
-        public static FontFamily Sans { get; } = new("fonts:Sidders#DM Sans");
+        public static FontFamily Sans { get; } = new("fonts:Acapella#DM Sans");
 
         /// <summary>Very Vogue Text. Titles only, weight 400.</summary>
-        public static FontFamily Serif { get; } = new("fonts:Sidders#Very Vogue");
+        public static FontFamily Serif { get; } = new("fonts:Acapella#Very Vogue");
 
         /// <summary>Perfectly Nineties. The hero number only, weight 400.</summary>
-        public static FontFamily Display { get; } = new("fonts:Sidders#Perfectly Nineties");
+        public static FontFamily Display { get; } = new("fonts:Acapella#Perfectly Nineties");
 
         /// <summary>Very Vogue Text Italic. The accent line of a headline. <c>h1 .emphasis</c>.</summary>
-        public static FontFamily SerifItalic { get; } = new("fonts:Sidders#Very Vogue");
+        public static FontFamily SerifItalic { get; } = new("fonts:Acapella#Very Vogue");
 
         /// <summary>JetBrains Mono. Chip labels and micro labels only. <c>--mono</c>.</summary>
-        public static FontFamily Mono { get; } = new("fonts:Sidders#JetBrains Mono");
+        public static FontFamily Mono { get; } = new("fonts:Acapella#JetBrains Mono");
 
         /// <summary>Tabular figures, the <c>.num</c> class.</summary>
         public static FontFeatureCollection Tabular { get; } = [new FontFeature { Tag = "tnum" }];
@@ -361,7 +415,7 @@ public static class Tokens
         public const double Nav = 15;
 
         /// <summary>The wordmark, DM Sans bold, tight.</summary>
-        public const double Wordmark = 26;
+        public const double Wordmark = 30;
 
         /// <summary>Eyebrow tracking, 0.14em at 10.5px.</summary>
         public const double EyebrowTracking = 1.47;
@@ -521,10 +575,13 @@ public static class Tokens
     public static class Layout
     {
         /// <summary>The white margin between the window edge and the rounded wash panel.</summary>
-        public const double PanelInset = 10;
+        public const double PanelInset = 20;
 
         /// <summary>Initial main window width.</summary>
         public const double MainWidth = 880;
+
+        /// <summary>Maximum main content width, keeping transcript lines readable on large screens.</summary>
+        public const double MainContentMaxWidth = 960;
 
         /// <summary>Initial main window height.</summary>
         public const double MainHeight = 660;
@@ -536,7 +593,9 @@ public static class Tokens
         public const double MainMinHeight = 480;
 
         /// <summary>Settings sheet width.</summary>
-        public const double SettingsWidth = 560;
+        public const double SettingsWidth = 880;
+        /// <summary>Maximum visible microphone list height before scrolling.</summary>
+        public const double DeviceDropdownHeight = 260;
 
         /// <summary>Editor and About width.</summary>
         public const double DialogWidth = 460;
@@ -611,7 +670,15 @@ public static class Tokens
         public const double BarMinFraction = 0.10;
 
         /// <summary>Overlay pill height.</summary>
-        public const double OverlayHeight = 48;
+        public const double OverlayHeight = 100;
+        /// <summary>Maximum additional height for live transcript lines.</summary>
+        public const double OverlayTextHeight = 80;
+        /// <summary>Visible listening card width, excluding shadow room.</summary>
+        public const double OverlayWidth = 300;
+        /// <summary>Listening meter height.</summary>
+        public const double OverlayBarsHeight = 36;
+        /// <summary>Display gain for quiet microphone levels; does not change captured audio.</summary>
+        public const double OverlayLevelGain = 4;
 
         /// <summary>Room around the overlay pill for its shadow.</summary>
         public const double OverlayShadowRoom = 28;
@@ -620,10 +687,10 @@ public static class Tokens
         public const double OverlayBottomMargin = 48;
 
         /// <summary>Widest the overlay preview text may grow before it is trimmed from the left.</summary>
-        public const double OverlayPreviewWidth = 420;
+        public const double OverlayPreviewWidth = 274;
 
         /// <summary>How many characters of the running transcript the overlay shows.</summary>
-        public const int OverlayPreviewChars = 70;
+        public const int OverlayPreviewChars = 240;
 
         /// <summary>Height of the multi-line instructions field in Settings.</summary>
         public const double FieldTallHeight = 96;
@@ -632,7 +699,7 @@ public static class Tokens
         public const double GaugeHeight = 6;
 
         /// <summary>The logo tile in the caption.</summary>
-        public const double LogoTile = 22;
+        public const double LogoTile = 36;
 
         /// <summary>Hero grid pitch. <c>.grid-pattern</c> 56px.</summary>
         public const double GridPitch = 56;

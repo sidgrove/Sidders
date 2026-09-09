@@ -5,13 +5,13 @@ namespace Murmur.Abstractions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The product is <b>Sidders</b>; the code namespaces still say Murmur because the repo is
+/// The product is <b>Acapella</b>; the code namespaces still say Murmur because the repo is
 /// shared with the macOS app and renaming a dozen projects buys nothing the user can see.
 /// Everything a user <i>does</i> see — window titles, the tray, the Start menu, the data
 /// folder — goes through here.
 /// </para>
 /// <para>
-/// The data folder moved from <c>%LOCALAPPDATA%\Murmur</c> to <c>%LOCALAPPDATA%\Sidders</c>
+/// The data folder moved from <c>%LOCALAPPDATA%\Sidders</c> to <c>%LOCALAPPDATA%\Acapella</c>
 /// with the rename. <see cref="MigrateLegacyFolder"/> moves an old folder across once, so
 /// the model, dictionary and history survive.
 /// </para>
@@ -19,10 +19,10 @@ namespace Murmur.Abstractions;
 public static class AppPaths
 {
     /// <summary>The name on the tin.</summary>
-    public const string ProductName = "Sidders";
+    public const string ProductName = "Acapella";
 
     /// <summary>The folder name used before the rename.</summary>
-    public const string LegacyFolderName = "Murmur";
+    public const string LegacyFolderName = "Sidders";
 
     /// <summary>Where settings, dictionary, history, log and models live.</summary>
     public static string Root => Path.Combine(

@@ -31,7 +31,7 @@ public static class Log
     /// <summary>Where the log is written. Defaults to the app data folder.</summary>
     public static string Path
     {
-        get => _path ??= System.IO.Path.Combine(AppPaths.Root, "sidders.log");
+        get => _path ??= System.IO.Path.Combine(AppPaths.Root, "acapella.log");
         set => _path = value;
     }
 

@@ -151,6 +151,7 @@ public sealed class PushToTalkHook : IHotkeySource
 
     private static PushToTalkHook? s_instance;
 
+    private readonly HotkeyEventDispatcher _notifications = new();
     private IntPtr _hook;
     private Thread? _thread;
     private uint _threadId;
@@ -243,7 +244,7 @@ public sealed class PushToTalkHook : IHotkeySource
         })
         {
             IsBackground = true,
-            Name = "Sidders push-to-talk hook",
+            Name = "Acapella push-to-talk hook",
             // Stay ahead of the 1000 ms timeout that silently removes the hook.
             Priority = ThreadPriority.AboveNormal,
         };
@@ -343,7 +344,8 @@ public sealed class PushToTalkHook : IHotkeySource
             if (!isDown) return true;
             _capturing = false;
             _seenModifiers = 0;
-            Captured?.Invoke(this, (key, HeldModifiers()));
+            var modifiers = HeldModifiers();
+            _notifications.Post(() => Captured?.Invoke(this, (key, modifiers)));
             return true;
         }
 
@@ -356,12 +358,12 @@ public sealed class PushToTalkHook : IHotkeySource
             return true;
         }
 
-        if (HeldModifiers() == 0)
+        if ((HeldModifiers() & ~FlagOf(key)) == 0)
         {
             _capturing = false;
             var others = _seenModifiers & ~FlagOf(key);
             _seenModifiers = 0;
-            Captured?.Invoke(this, (key, others));
+            _notifications.Post(() => Captured?.Invoke(this, (key, others)));
         }
 
         return true;
@@ -385,15 +387,15 @@ public sealed class PushToTalkHook : IHotkeySource
         if (_capturing) return Capture(Normalize(e), isDown);
 
         var key = Normalize(e);
-        if (key == VK_ESCAPE && isDown) CancelPressed?.Invoke(this, EventArgs.Empty);
+        if (key == VK_ESCAPE && isDown) _notifications.Post(() => CancelPressed?.Invoke(this, EventArgs.Empty));
 
         switch (_chord.Feed(key, isDown))
         {
             case ChordEvent.Pressed:
-                Pressed?.Invoke(this, EventArgs.Empty);
+                _notifications.Post(() => Pressed?.Invoke(this, EventArgs.Empty));
                 break;
             case ChordEvent.Released:
-                Released?.Invoke(this, EventArgs.Empty);
+                _notifications.Post(() => Released?.Invoke(this, EventArgs.Empty));
                 break;
         }
 
@@ -434,5 +436,9 @@ public sealed class PushToTalkHook : IHotkeySource
     }
 
     /// <inheritdoc />
-    public void Dispose() => StopListening();
+    public void Dispose()
+    {
+        StopListening();
+        _notifications.Dispose();
+    }
 }

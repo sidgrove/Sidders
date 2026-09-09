@@ -13,7 +13,7 @@ using Murmur.Speech;
 namespace Murmur.App.Views;
 
 /// <summary>Settings: the key, the microphone, the model, AI clean-up, behaviour.</summary>
-public sealed class SettingsWindow : ShellWindow
+public sealed class SettingsView : UserControl
 {
     private readonly Composition _composition;
     private readonly AppSettings _settings;
@@ -23,38 +23,46 @@ public sealed class SettingsWindow : ShellWindow
     public event EventHandler? ModelChanged;
 
     /// <summary>Builds the settings window.</summary>
-    public SettingsWindow(Composition composition)
+    public SettingsView(Composition composition)
     {
         _composition = composition;
         _settings = composition.Settings;
 
-        Title = "Settings";
-        IsSheet = true;
-        Width = Tokens.Layout.SettingsWidth;
-        SizeToContent = SizeToContent.Height;
-        // Never taller than the screen: a dialog that runs off the bottom hides its own
-        // footer and cannot be scrolled.
-        MaxHeight = (Screens.Primary?.WorkingArea.Height ?? 900) / (Screens.Primary?.Scaling ?? 1) - Tokens.Space.Empty * 2;
-        CanResize = false;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
-
         _model = new ModelPart(composition);
         _model.ModelChanged += (_, _) => ModelChanged?.Invoke(this, EventArgs.Empty);
 
-        var body = Panels.Column(Tokens.Space.Wide,
+        var body = Panels.Column(Tokens.Space.Roomy,
             Card.Standard(Panels.Section("Push to talk", "Which key, and how it works.", new KeyPart(composition))),
             Card.Standard(Panels.Section("Microphone", "Applies to the next recording.", BuildMicrophoneSection())),
             Card.Standard(Panels.Section("Speech model", "Runs on this machine. Nothing is sent anywhere.", _model)),
             Card.Standard(Panels.Section("Writing", "Rules applied on this machine, before anything else.", BuildWritingSection())),
             Card.Standard(Panels.Section("AI clean-up", "Optional. Tidies the transcript with Gemini before typing.", BuildAiSection())),
             Card.Standard(Panels.Section("Behaviour", null, BuildBehaviourSection())));
-        body.Margin = new Thickness(Tokens.Space.Wide, Tokens.Space.Snug, Tokens.Space.Wide, Tokens.Space.Wide);
+        body.Margin = new Thickness(Tokens.Space.Section, Tokens.Space.Roomy, Tokens.Space.Section, Tokens.Space.Section);
 
-        Content = Frame("Settings", new ScrollViewer { Content = body });
+        Content = new ScrollViewer { Content = body };
     }
 
     private StackPanel BuildWritingSection()
     {
+        var sendWord = new TextBox { Text = _settings.Data.SendWord, Watermark = "blob" };
+        sendWord.TextChanged += (_, _) =>
+        {
+            var value = sendWord.Text?.Trim() ?? string.Empty;
+            if (_settings.Data.SendWord != value) Save(_settings.Data with { SendWord = value });
+        };
+        var sendAliases = new TextBox { Text = _settings.Data.SendWordAliases, Watermark = "e.g. sand" };
+        sendAliases.TextChanged += (_, _) =>
+        {
+            var value = sendAliases.Text ?? string.Empty;
+            if (_settings.Data.SendWordAliases != value) Save(_settings.Data with { SendWordAliases = value });
+        };
+        var sendOnly = new TextBox { Text = _settings.Data.SendOnlyPhrase, Watermark = "send it" };
+        sendOnly.TextChanged += (_, _) =>
+        {
+            var value = sendOnly.Text?.Trim() ?? string.Empty;
+            if (_settings.Data.SendOnlyPhrase != value) Save(_settings.Data with { SendOnlyPhrase = value });
+        };
         var fullStops = new Segmented(["Drop after one sentence", "Never end with one", "Keep"], (int)FullStopIndex(_settings.Data.FullStops));
         fullStops.Selected += (_, i) =>
         {
@@ -64,6 +72,12 @@ public sealed class SettingsWindow : ShellWindow
 
         return Panels.Column(Tokens.Space.Roomy,
             Panels.Column(Tokens.Space.Snug,
+                Panels.Labelled("Send word", sendWord),
+                Panels.Labelled("Also send if you hear", sendAliases),
+                Text.Muted("Alternative words, separated by commas. Only matched at the end of the dictation, never between sentences or paragraphs."),
+                Text.Muted("End your dictation with this word to insert the text and press Enter when recording stops. The word is removed. Leave blank to disable."),
+                Panels.Labelled("Send existing text", sendOnly),
+                Text.Muted("Say this phrase on its own, then stop recording, to press Enter without typing anything. Leave blank to disable."),
                 Text.Body("Full stop at the very end"),
                 fullStops,
                 Text.Muted("Chat messages and fragments read better without one. Questions and exclamation marks always stay.")),
@@ -83,36 +97,11 @@ public sealed class SettingsWindow : ShellWindow
             return list;
         }
 
-        var rows = new List<(string? Id, StatusDot Dot, Border Row)>();
         var chosen = _settings.Data.MicrophoneDeviceId;
-
-        void Select(string? id)
+        list.Children.Add(new MicrophonePicker(devices, chosen, id =>
         {
-            foreach (var (rowId, dot, row) in rows)
-            {
-                var active = rowId == id;
-                dot.Fill = active ? Tokens.Brushes.Brand : Tokens.Brushes.Line;
-                row.Background = active ? Tokens.Brushes.BrandLight : Tokens.Brushes.Surface;
-            }
             if (_settings.Data.MicrophoneDeviceId != id) Save(_settings.Data with { MicrophoneDeviceId = id });
-        }
-
-        Border Row(string? id, string name, bool isDefault)
-        {
-            var dot = new StatusDot { VerticalAlignment = VerticalAlignment.Center };
-            var label = Panels.Row(Tokens.Space.Snug, Text.Body(name));
-            if (isDefault) label.Children.Add(Pill.Neutral("Windows default"));
-
-            var row = Card.Subtle(Panels.Row(Tokens.Space.Base, dot, label), Tokens.Space.Base);
-            row.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
-            row.PointerPressed += (_, _) => Select(id);
-            rows.Add((id, dot, row));
-            return row;
-        }
-
-        list.Children.Add(Row(null, "Follow the Windows default", isDefault: false));
-        foreach (var device in devices) list.Children.Add(Row(device.Id, device.Name, device.IsDefault));
-
+        }));
         if (devices.Count == 0)
         {
             list.Children.Add(Text.Muted("No active microphone found. Plug one in, or check Settings → Privacy & security → Microphone."));
@@ -121,13 +110,6 @@ public sealed class SettingsWindow : ShellWindow
         if (chosen is not null && devices.All(d => d.Id != chosen))
         {
             list.Children.Add(Text.Muted("The microphone you chose isn't connected right now; the Windows default is used until it is."));
-        }
-
-        foreach (var (rowId, dot, row) in rows)
-        {
-            var active = rowId == chosen;
-            dot.Fill = active ? Tokens.Brushes.Brand : Tokens.Brushes.Line;
-            row.Background = active ? Tokens.Brushes.BrandLight : Tokens.Brushes.Surface;
         }
 
         return list;
@@ -189,9 +171,9 @@ public sealed class SettingsWindow : ShellWindow
     private StackPanel BuildBehaviourSection()
     {
         var column = Panels.Column(Tokens.Space.Roomy,
-            Panels.SwitchRow("Type into the focused app", "Off keeps the history only.", _settings.Data.InjectText, v => Save(_settings.Data with { InjectText = v })),
+            Panels.SwitchRow("Type into the focused app", "Off copies to the clipboard and keeps history without typing or pressing Enter.", _settings.Data.InjectText, v => Save(_settings.Data with { InjectText = v })),
             Panels.SwitchRow("Keep a history", null, _settings.Data.KeepHistory, v => Save(_settings.Data with { KeepHistory = v })),
-            Panels.SwitchRow("Turn other audio down while I talk", "Music, video and calls drop to a whisper while the key is held and come straight back. Your volume slider is never touched.", _settings.Data.DuckOtherAudio, v => Save(_settings.Data with { DuckOtherAudio = v })),
+            Panels.SwitchRow("Mute other audio while I talk", "Mutes other apps on the current output while recording, then restores their previous mute state. Volume levels stay unchanged.", _settings.Data.DuckOtherAudio, v => Save(_settings.Data with { DuckOtherAudio = v })),
             Panels.SwitchRow("Drop the full stop after a single sentence", "For chat messages and fragments. Questions and longer dictations keep their punctuation.", _settings.Data.DropSingleSentenceFullStop, v => Save(_settings.Data with { DropSingleSentenceFullStop = v })));
 
         if (_composition.Startup is { } startup)

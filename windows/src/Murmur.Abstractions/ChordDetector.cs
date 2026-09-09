@@ -25,14 +25,12 @@ public enum ChordEvent
 /// missed, and then fired late off Ctrl's key autorepeat, which felt like "sometimes".
 /// </para>
 /// <para>
-/// Release is tied to the trigger key alone: letting go of a modifier while the trigger is
-/// still held keeps the recording going, and the trigger coming up always ends it, so a
-/// recording can never be left running.
+/// Releasing either required part ends the chord, so tapping one key again while
+/// holding the other reliably produces a fresh press.
 /// </para>
 /// <para>
-/// Key state is read through a delegate rather than tracked from events, because the hook
-/// is installed after the app starts and a key already held at that moment would otherwise
-/// be invisible until released.
+/// Observed events are authoritative. The physical-state delegate seeds keys whose
+/// events have not yet been seen, including keys held before the hook was installed.
 /// </para>
 /// </remarks>
 public sealed class ChordDetector
@@ -51,6 +49,7 @@ public sealed class ChordDetector
 
     private readonly Func<int, bool> _isKeyDown;
     private bool _active;
+    private readonly Dictionary<int, bool> _observed = [];
 
     /// <param name="isKeyDown">Whether a virtual key is physically down right now.</param>
     public ChordDetector(Func<int, bool> isKeyDown) => _isKeyDown = isKeyDown;
@@ -69,46 +68,42 @@ public sealed class ChordDetector
     /// <param name="isDown">True for key-down, including autorepeat; false for key-up.</param>
     public ChordEvent Feed(int key, bool isDown)
     {
-        if (key == TriggerKey)
+        var repeat = _observed.TryGetValue(key, out var previous) && previous && isDown;
+        _observed[key] = isDown;
+        var relevant = key == TriggerKey || (FlagOf(key) & Modifiers) != 0;
+        if (!relevant) return ChordEvent.None;
+        var complete = Down(TriggerKey) && ModifiersHeld();
+        if (_active && !complete)
         {
-            if (isDown)
-            {
-                // Autorepeat re-fires key-down while held; only the first is a press.
-                if (_active || !ModifiersHeld()) return ChordEvent.None;
-                _active = true;
-                return ChordEvent.Pressed;
-            }
-
-            if (!_active) return ChordEvent.None;
             _active = false;
             return ChordEvent.Released;
         }
-
-        // A required modifier arriving after the trigger completes the chord too.
-        if (isDown && !_active && (FlagOf(key) & Modifiers) != 0 && _isKeyDown(TriggerKey) && ModifiersHeld())
+        if (!_active && isDown && !repeat && complete)
         {
             _active = true;
             return ChordEvent.Pressed;
         }
-
         return ChordEvent.None;
     }
 
-    /// <summary>Forgets a held chord, e.g. when the hook is reinstalled.</summary>
-    public void Reset() => _active = false;
+    /// <summary>Forgets observed key state when the hook is reinstalled.</summary>
+    public void Reset()
+    {
+        _active = false;
+        _observed.Clear();
+    }
+
+    private bool Down(int key) => _observed.TryGetValue(key, out var down) ? down : _isKeyDown(key);
 
     private bool ModifiersHeld()
     {
         var required = (HotkeyModifiers)Modifiers;
-        if (required == HotkeyModifiers.None) return true;
-
-        if (required.HasFlag(HotkeyModifiers.Control) && !_isKeyDown(VK_CONTROL)) return false;
-        if (required.HasFlag(HotkeyModifiers.Shift) && !_isKeyDown(VK_SHIFT)) return false;
-        if (required.HasFlag(HotkeyModifiers.Alt) && !_isKeyDown(VK_MENU)) return false;
-        if (required.HasFlag(HotkeyModifiers.Windows) && !_isKeyDown(VK_LWIN) && !_isKeyDown(VK_RWIN)) return false;
+        if (required.HasFlag(HotkeyModifiers.Control) && !Down(VK_LCONTROL) && !Down(VK_RCONTROL)) return false;
+        if (required.HasFlag(HotkeyModifiers.Shift) && !Down(VK_LSHIFT) && !Down(VK_RSHIFT)) return false;
+        if (required.HasFlag(HotkeyModifiers.Alt) && !Down(VK_LMENU) && !Down(VK_RMENU)) return false;
+        if (required.HasFlag(HotkeyModifiers.Windows) && !Down(VK_LWIN) && !Down(VK_RWIN)) return false;
         return true;
     }
-
     private static int FlagOf(int vk) => vk switch
     {
         VK_LCONTROL or VK_RCONTROL or VK_CONTROL => (int)HotkeyModifiers.Control,

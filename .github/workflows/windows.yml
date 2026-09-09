@@ -79,7 +79,7 @@ jobs:
             --configuration Release --runtime win-x64 --self-contained true `
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
             --output artifacts/publish
-          $exe = 'artifacts/publish/Sidders.exe'
+          $exe = 'artifacts/publish/Acapella.exe'
           if (-not (Test-Path $exe)) { throw "Published exe not found at $exe" }
           $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
           Write-Host "published: $size MB"
@@ -88,11 +88,11 @@ jobs:
           $run = Start-Process -FilePath $exe -ArgumentList '--selftest' -Wait -PassThru -NoNewWindow
           if ($run.ExitCode -ne 0) { throw "self-test failed with exit code $($run.ExitCode)" }
 
-      - name: Upload the exe
+      - name: Upload the complete Windows app
         uses: actions/upload-artifact@v4
         with:
-          name: Murmur-win-x64
-          path: windows/artifacts/publish/Sidders.exe
+          name: Acapella-win-x64
+          path: windows/artifacts/publish/
           if-no-files-found: error
           compression-level: 0
 

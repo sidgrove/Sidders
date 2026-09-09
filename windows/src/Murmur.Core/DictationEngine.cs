@@ -122,6 +122,18 @@ public sealed class DictationEngine : IAsyncDisposable
     /// <summary>Whether text should be typed into the focused app after a dictation.</summary>
     public bool InjectText { get; set; } = true;
 
+    /// <summary>Terminal spoken command that presses Enter; blank disables it.</summary>
+    public string SendWord { get; set; } = "blob";
+
+    /// <summary>Comma-separated alternative words recognised only at the end of dictation.</summary>
+    public string SendWordAliases { get; set; } = string.Empty;
+
+    /// <summary>Phrase that presses Enter only when it is the entire dictation; blank disables it.</summary>
+    public string SendOnlyPhrase { get; set; } = "send it";
+
+    /// <summary>Copies the final transcript before delivery, even when automatic typing is off.</summary>
+    public Func<string, Task>? CopyTranscriptAsync { get; set; }
+
     /// <summary>What happens to a full stop at the very end.</summary>
     public TrailingFullStop FullStops { get; set; } = TrailingFullStop.DropAfterSingleSentence;
 
@@ -161,7 +173,21 @@ public sealed class DictationEngine : IAsyncDisposable
     public IAudioDucker? Ducker { get; set; }
 
     /// <summary>Whether <see cref="Ducker"/> is used. Read at the start of each recording.</summary>
-    public bool DuckAudio { get; set; } = true;
+    public bool DuckAudio
+    {
+        get { lock (_audioLock) return _duckAudio; }
+        set
+        {
+            lock (_audioLock)
+            {
+                _duckAudio = value;
+                if (!value) RestoreAudio();
+            }
+        }
+    }
+
+    private readonly object _audioLock = new();
+    private bool _duckAudio = true;
 
     private bool _ducked;
 
@@ -193,7 +219,21 @@ public sealed class DictationEngine : IAsyncDisposable
     /// Whether the key does anything. Off leaves the hook installed but ignores it, so
     /// switching back on is instant and nothing is re-registered.
     /// </summary>
-    public bool IsEnabled { get; set; } = true;
+    public bool IsEnabled
+    {
+        get { lock (_audioLock) return _isEnabled; }
+        set
+        {
+            lock (_audioLock)
+            {
+                _isEnabled = value;
+                if (!value) RestoreAudio();
+            }
+            if (!value) Cancel();
+        }
+    }
+
+    private bool _isEnabled = true;
 
     /// <summary>The push-to-talk key, as a virtual-key code. Applies to the next press.</summary>
     public int HotkeyVirtualKey
@@ -224,6 +264,9 @@ public sealed class DictationEngine : IAsyncDisposable
 
     /// <summary>Raised when a dictation completes and produced text.</summary>
     public event EventHandler<DictationResult>? Completed;
+
+    /// <summary>Raised only after the explicit send command successfully presses Enter.</summary>
+    public event EventHandler? Sent;
 
     /// <summary>Raised whenever <see cref="State"/> or <see cref="Level"/> changes.</summary>
     public event EventHandler? Changed;
@@ -268,7 +311,7 @@ public sealed class DictationEngine : IAsyncDisposable
         IsHotkeyArmed = _hotkey.Start();
         Log.Info(IsHotkeyArmed ? "hotkey armed" : "hotkey could NOT be installed");
 
-        if (!IsHotkeyArmed) Fault("The push-to-talk key could not be hooked. Try restarting Sidders.");
+        if (!IsHotkeyArmed) Fault("The push-to-talk key could not be hooked. Try restarting Acapella.");
         return IsHotkeyArmed;
     }
 
@@ -358,7 +401,7 @@ public sealed class DictationEngine : IAsyncDisposable
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (State != DictationState.Idle) return;
+            if (!IsEnabled || State != DictationState.Idle) return;
 
             _buffer = [];
             _startedAt = _clock.Now;
@@ -601,7 +644,19 @@ public sealed class DictationEngine : IAsyncDisposable
 
         // The dictionary runs first and unconditionally. Biasing only raises the odds of the
         // right word; this is the pass that guarantees it.
-        var (dictionaryText, applied) = new DictionaryCorrector(entries).Apply(raw);
+        if (SpokenSendCommand.IsStandalone(raw, SendOnlyPhrase))
+        {
+            if (InjectText) await SendToFocusedAppAsync().ConfigureAwait(false);
+            return;
+        }
+        // Detect before corrections or AI can alter or invent the command.
+        var (content, send) = SpokenSendCommand.Extract(raw, SendWord, SendWordAliases);
+        if (send && string.IsNullOrWhiteSpace(content))
+        {
+            if (InjectText) await SendToFocusedAppAsync().ConfigureAwait(false);
+            return;
+        }
+        var (dictionaryText, applied) = new DictionaryCorrector(entries).Apply(content);
 
         // Then the rules: spoken commands and fillers, deterministically, so local-only mode
         // is complete on its own and the AI tier has less to do.
@@ -644,6 +699,8 @@ public sealed class DictationEngine : IAsyncDisposable
 
         // Polish runs last so a correction or a clean-up that ends a sentence is treated
         // the same as one the engine produced itself.
+        // A recognised command never belongs in the final text or clipboard.
+        if (send) candidate = SpokenSendCommand.Extract(candidate, SendWord, SendWordAliases).Text;
         var corrected = TranscriptPolish.Apply(candidate, FullStops);
 
         var result = new DictationResult(
@@ -657,6 +714,11 @@ public sealed class DictationEngine : IAsyncDisposable
             CleanupFailed: cleanupFailed);
 
         if (cleanedBy is not null || !AiCleanup) LastFault = null;
+        if (CopyTranscriptAsync is { } copy)
+        {
+            try { await copy(corrected).ConfigureAwait(false); }
+            catch (Exception e) { Log.Warn($"Could not copy transcription to clipboard: {e.Message}"); }
+        }
         Completed?.Invoke(this, result);
 
         if (!InjectText) return;
@@ -667,6 +729,18 @@ public sealed class DictationEngine : IAsyncDisposable
             Log.Warn("text could not be delivered to the focused app");
             Fault("The text could not be typed into the focused app. It is in the history — press COPY.");
         }
+        else if (send)
+        {
+            await SendToFocusedAppAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task SendToFocusedAppAsync()
+    {
+        if (await _injector.SendAsync(CancellationToken.None).ConfigureAwait(false))
+            Sent?.Invoke(this, EventArgs.Empty);
+        else
+            Fault("Enter could not be pressed. Send the text manually.");
     }
 
     private DateTimeOffset _lastFaultAt = DateTimeOffset.MinValue;
@@ -683,34 +757,35 @@ public sealed class DictationEngine : IAsyncDisposable
 
     private void SetState(DictationState state)
     {
-        var wasRecording = State == DictationState.Recording;
-        State = state;
-
-        // Ducking follows the Recording state and nothing else, so every way out of a
-        // recording — finish, cancel, fault — restores the other applications' audio.
-        var isRecording = state == DictationState.Recording;
-        if (isRecording && !wasRecording && DuckAudio && Ducker is { } ducker)
+        lock (_audioLock)
         {
-            _ducked = true;
-            ducker.Duck();
-            Log.Info("other audio ducked");
+            var wasRecording = State == DictationState.Recording;
+            State = state;
+            var isRecording = state == DictationState.Recording;
+            if (isRecording && !wasRecording && _isEnabled && _duckAudio && Ducker is { } ducker)
+            {
+                _ducked = true;
+                ducker.Duck();
+                Log.Info("other audio ducked");
+            }
+            else if (!isRecording)
+            {
+                RestoreAudio();
+            }
         }
-        else if (wasRecording && !isRecording)
-        {
-            RestoreAudio();
-        }
-
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void RestoreAudio()
     {
-        if (!_ducked) return;
-        _ducked = false;
-        Ducker?.Restore();
-        Log.Info("other audio restored");
+        lock (_audioLock)
+        {
+            if (!_ducked) return;
+            _ducked = false;
+            Ducker?.Restore();
+            Log.Info("other audio restored");
+        }
     }
-
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {

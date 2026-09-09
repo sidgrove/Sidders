@@ -107,6 +107,9 @@ public sealed class Composition : IAsyncDisposable
                 () => dictionary.Entries)
             {
                 InjectText = settings.Data.InjectText,
+                SendWord = settings.Data.SendWord,
+                SendWordAliases = settings.Data.SendWordAliases,
+                SendOnlyPhrase = settings.Data.SendOnlyPhrase,
                 FullStops = settings.Data.FullStops,
                 Mode = settings.Data.Mode,
                 SpokenCommands = settings.Data.SpokenCommands,
@@ -123,6 +126,9 @@ public sealed class Composition : IAsyncDisposable
             settings.Changed += (_, _) =>
             {
                 engine.InjectText = settings.Data.InjectText;
+                engine.SendWord = settings.Data.SendWord;
+                engine.SendWordAliases = settings.Data.SendWordAliases;
+                engine.SendOnlyPhrase = settings.Data.SendOnlyPhrase;
                 engine.FullStops = settings.Data.FullStops;
                 engine.Mode = settings.Data.Mode;
                 engine.SpokenCommands = settings.Data.SpokenCommands;

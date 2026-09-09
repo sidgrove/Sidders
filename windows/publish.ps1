@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds the distributable Sidders.executable.
+  Builds the distributable Acapella.executable.
 
 .DESCRIPTION
   Produces a self-contained, single-file win-x64 build in windows/dist/. The platform
@@ -8,7 +8,7 @@
   why — so the whole dist folder is the artifact, not the exe alone.
 
   Run install.ps1 afterwards to put it in Start and on the taskbar, or copy the dist folder
-  anywhere and double-click Sidders.exe.
+  anywhere and double-click Acapella.exe.
 
 .PARAMETER Runtime
   win-x64 (default) or win-arm64. Use the ARM build on ARM machines: the x64 one runs under
@@ -32,7 +32,7 @@ dotnet publish src/Murmur.App/Murmur.App.csproj `
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 
 # The published exe must actually start out of the bundle before anyone ships it.
-$exe = Join-Path $dist 'Sidders.exe'
+$exe = Join-Path $dist 'Acapella.exe'
 $run = Start-Process -FilePath $exe -ArgumentList '--selftest' -Wait -PassThru -NoNewWindow
 if ($run.ExitCode -ne 0) { throw "self-test failed with exit code $($run.ExitCode)" }
 

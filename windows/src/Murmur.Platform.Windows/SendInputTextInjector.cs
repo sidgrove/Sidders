@@ -29,7 +29,7 @@ public sealed class SendInputTextInjector : ITextInjector
     /// <remarks>
     /// Low on purpose. Typing is one message per character and browsers, Teams, Slack and
     /// the like process each one slowly enough that a sentence visibly types itself out.
-    /// A paste is one message. Short phrases are still typed so the clipboard is left alone.
+    /// A paste is one message. Short phrases are still typed; the app copies their transcript separately.
     /// </remarks>
     private const int PasteThreshold = 40;
 
@@ -45,7 +45,7 @@ public sealed class SendInputTextInjector : ITextInjector
     /// </summary>
     private static readonly TimeSpan ClipboardSettle = TimeSpan.FromMilliseconds(60);
 
-    /// <summary>Time for the target to finish reading before the clipboard is restored.</summary>
+    /// <summary>Time for the target to finish processing the paste before delivery completes.</summary>
     private static readonly TimeSpan PasteSettle = TimeSpan.FromMilliseconds(500);
 
     private const uint INPUT_KEYBOARD = 1;
@@ -145,19 +145,19 @@ public sealed class SendInputTextInjector : ITextInjector
     }
 
     /// <summary>
-    /// Puts the text on the clipboard, presses Ctrl+V, then puts the previous text back.
+    /// Puts the text on the clipboard and presses Ctrl+V, leaving the transcript available.
     /// Falls back to typing if the clipboard cannot be taken.
     /// </summary>
     private static async Task<bool> PasteAsync(string text, CancellationToken cancellationToken)
     {
-        var previous = Win32Clipboard.GetText();
+        // Keep the completed transcription available for subsequent manual pastes.
         if (!Win32Clipboard.SetText(text)) return TypeWithNewlines(text);
 
         await Task.Delay(ClipboardSettle, cancellationToken).ConfigureAwait(false);
         var pasted = PressCtrlV();
         await Task.Delay(PasteSettle, cancellationToken).ConfigureAwait(false);
 
-        if (previous is not null) Win32Clipboard.SetText(previous);
+        // Do not restore an older clipboard value after delivery.
         return pasted;
     }
 
@@ -248,6 +248,22 @@ public sealed class SendInputTextInjector : ITextInjector
         return SendInput((uint)inputs.Length, inputs, InputSize) == inputs.Length;
     }
 
+    /// <inheritdoc />
+    public async ValueTask<bool> SendAsync(CancellationToken cancellationToken)
+    {
+        // Let typed characters reach the target before its submit key.
+        await Task.Delay(ClipboardSettle, cancellationToken).ConfigureAwait(false);
+        var held = new List<int>();
+        foreach (var key in new[] { VK_CONTROL, VK_SHIFT, VK_MENU, VK_LWIN, VK_RWIN })
+            if ((GetAsyncKeyState(key) & 0x8000) != 0) held.Add(key);
+        var sequence = new List<INPUT>();
+        foreach (var key in held) sequence.Add(KeyInput(key, up: true));
+        sequence.Add(KeyInput(VK_RETURN, up: false));
+        sequence.Add(KeyInput(VK_RETURN, up: true));
+        foreach (var key in held) sequence.Add(KeyInput(key, up: false));
+        var inputs = sequence.ToArray();
+        return SendInput((uint)inputs.Length, inputs, InputSize) == inputs.Length;
+    }
     /// <summary>How long to wait after setting the clipboard before pasting.</summary>
     public static TimeSpan ClipboardSettleDelay => ClipboardSettle;
 

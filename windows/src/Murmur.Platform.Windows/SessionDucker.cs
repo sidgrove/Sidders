@@ -1,68 +1,67 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Murmur.Abstractions;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 
 namespace Murmur.Platform.Windows;
 
-/// <summary>
-/// Ducks other applications through their WASAPI audio sessions.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Per-session volumes rather than the endpoint's master volume: this is the same
-/// mechanism Windows itself uses for communications ducking, it leaves the user's volume
-/// slider exactly where they put it, and a session's volume dies with the session — so
-/// even if this process vanished mid-hold, the worst case is one quiet app until it is
-/// restarted, never a silent machine.
-/// </para>
-/// <para>
-/// Each <see cref="Duck"/> takes a fresh snapshot of the sessions on the default output
-/// device. Sessions that start during a hold are not ducked; that is a short window and
-/// not worth a callback registration.
-/// </para>
-/// </remarks>
+/// <summary>Mutes other apps temporarily, with a durable recovery record for interrupted recordings.</summary>
 public sealed class SessionDucker : IAudioDucker
 {
-    /// <summary>How much of its own volume each other application keeps while the user talks.</summary>
-    public const float DuckedFraction = 0.15f;
-
     private readonly object _lock = new();
-    private readonly List<(AudioSessionControl Session, float Original)> _ducked = [];
+    private readonly List<(AudioSessionControl Session, string Id)> _ducked = [];
+    private readonly string _recoveryPath = Path.Combine(AppPaths.Root, "audio-restore.json");
     private MMDevice? _device;
+
+    /// <summary>Restores sessions left muted by a previous interrupted app process.</summary>
+    public SessionDucker()
+    {
+        lock (_lock) RecoverInterruptedMute();
+    }
 
     /// <inheritdoc />
     public void Duck()
     {
         lock (_lock)
         {
-            if (_ducked.Count > 0) return;
-
+            if (_device is not null) return;
             try
             {
+                // Never overwrite an outstanding restoration record.
+                RecoverInterruptedMute();
+                if (File.Exists(_recoveryPath)) return;
                 using var enumerator = new MMDeviceEnumerator();
                 if (!enumerator.HasDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)) return;
-
                 _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
                 var sessions = _device.AudioSessionManager.Sessions;
-                var ownPid = (uint)Environment.ProcessId;
-
                 for (var i = 0; i < sessions.Count; i++)
                 {
                     var session = sessions[i];
-                    if (session.GetProcessID == ownPid || session.State != AudioSessionState.AudioSessionStateActive) continue;
-
-                    var original = session.SimpleAudioVolume.Volume;
-                    session.SimpleAudioVolume.Volume = original * DuckedFraction;
-                    _ducked.Add((session, original));
+                    if (session.GetProcessID == (uint)Environment.ProcessId ||
+                        session.State == AudioSessionState.AudioSessionStateExpired ||
+                        session.SimpleAudioVolume.Mute) continue;
+                    _ducked.Add((session, session.GetSessionInstanceIdentifier));
                 }
 
-                Debug.WriteLine($"ducked {_ducked.Count} audio session(s)");
+                // Save BEFORE touching Windows audio. If persistence fails, do not mute.
+                if (_ducked.Count > 0)
+                {
+                    Directory.CreateDirectory(AppPaths.Root);
+                    var pending = new Dictionary<string, string[]>
+                    {
+                        [_device.ID] = _ducked.Select(x => x.Id).ToArray(),
+                    };
+                    var temporary = _recoveryPath + ".tmp";
+                    File.WriteAllText(temporary, JsonSerializer.Serialize(pending, AudioRecoveryJson.Default.DictionaryStringStringArray));
+                    File.Move(temporary, _recoveryPath, overwrite: true);
+                    foreach (var (session, _) in _ducked) session.SimpleAudioVolume.Mute = true;
+                }
             }
-            catch (Exception e) when (e is COMException or InvalidCastException or UnauthorizedAccessException)
+            catch (Exception e) when (IsAudioOrFileError(e))
             {
-                Debug.WriteLine($"could not duck audio: {e.Message}");
+                Debug.WriteLine($"could not mute audio: {e.Message}");
                 RestoreLocked();
             }
         }
@@ -76,21 +75,50 @@ public sealed class SessionDucker : IAudioDucker
 
     private void RestoreLocked()
     {
-        foreach (var (session, original) in _ducked)
+        foreach (var (session, _) in _ducked)
         {
-            try
-            {
-                session.SimpleAudioVolume.Volume = original;
-            }
-            catch (Exception e) when (e is COMException or InvalidCastException)
-            {
-                // The application has closed; its session is gone and so is the need.
-                Debug.WriteLine(e.Message);
-            }
+            try { session.SimpleAudioVolume.Mute = false; }
+            catch (Exception e) when (IsAudioOrFileError(e)) { Debug.WriteLine(e.Message); }
         }
-
         _ducked.Clear();
         _device?.Dispose();
         _device = null;
+        RecoverInterruptedMute();
     }
+
+    private void RecoverInterruptedMute()
+    {
+        if (!File.Exists(_recoveryPath)) return;
+        try
+        {
+            var pending = JsonSerializer.Deserialize(File.ReadAllText(_recoveryPath), AudioRecoveryJson.Default.DictionaryStringStringArray);
+            if (pending is null) return;
+            using var enumerator = new MMDeviceEnumerator();
+            foreach (var (deviceId, ids) in pending)
+            {
+                // Match exact session instances, never a recycled process id or a new app session.
+                using var device = enumerator.GetDevice(deviceId);
+                var sessions = device.AudioSessionManager.Sessions;
+                for (var i = 0; i < sessions.Count; i++)
+                {
+                    var session = sessions[i];
+                    if (session.State != AudioSessionState.AudioSessionStateExpired &&
+                        ids.Contains(session.GetSessionInstanceIdentifier, StringComparer.Ordinal))
+                        session.SimpleAudioVolume.Mute = false;
+                }
+            }
+            File.Delete(_recoveryPath);
+        }
+        catch (Exception e) when (IsAudioOrFileError(e) || e is JsonException)
+        {
+            // Keep the record and retry on the next start/recording if an endpoint is unavailable.
+            Debug.WriteLine($"audio restoration pending: {e.Message}");
+        }
+    }
+
+    private static bool IsAudioOrFileError(Exception e) =>
+        e is COMException or InvalidCastException or UnauthorizedAccessException or IOException;
 }
+
+[System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, string[]>))]
+internal sealed partial class AudioRecoveryJson : System.Text.Json.Serialization.JsonSerializerContext;

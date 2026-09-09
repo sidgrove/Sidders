@@ -21,17 +21,14 @@ public sealed class MainWindow : ShellWindow
 {
     private readonly Composition? _composition;
     private readonly Badge _badge;
-    private readonly TextBlock _headline;
-    private readonly TextBlock _accent;
     private readonly TextBlock _subtitle;
     private readonly TextBlock _counter;
     private readonly TextBlock _readoutLabel;
     private readonly LevelBars _bars;
-    private readonly SgButton _record;
-    private readonly TextBlock _recordLabel;
-    private readonly Coin _coin;
     private readonly NavLink _transcriptionsLink;
     private readonly NavLink _dictionaryLink;
+    private NavLink? _settingsLink;
+    private SettingsView? _settingsView;
     private readonly ContentControl _sectionHost;
     private readonly Border _fault;
     private readonly TextBlock _faultText;
@@ -61,23 +58,17 @@ public sealed class MainWindow : ShellWindow
         Width = Tokens.Layout.MainWidth;
         Height = Tokens.Layout.MainHeight;
 
-        _badge = new Badge("Ready");
-        _headline = Headline.Line("Say it,");
-        _accent = Headline.Accent("and it's typed.");
-        _subtitle = Headline.Subtitle(string.Empty);
+        _badge = new Badge("Ready") { IsVisible = false };
+        _subtitle = Text.Muted(string.Empty);
 
-        _counter = Text.Hero("00:00");
+        _counter = Text.Number("00:00", Tokens.Fonts.CaptionTitle, Tokens.Brushes.Muted);
         _readoutLabel = Text.Eyebrow("Idle");
-        _bars = new LevelBars(Tokens.Layout.BarsCount, Tokens.Layout.BarsHeight) { HorizontalAlignment = HorizontalAlignment.Center };
+        _bars = new LevelBars(Tokens.Layout.BarsCountSmall, Tokens.Layout.BarsHeightSmall) { HorizontalAlignment = HorizontalAlignment.Center };
         _preview = Text.Muted(string.Empty);
         _preview.TextWrapping = Avalonia.Media.TextWrapping.Wrap;
         _preview.MaxWidth = Tokens.Layout.OverlayPreviewWidth;
         _preview.IsVisible = false;
 
-        _recordLabel = new TextBlock { Text = "Start recording", VerticalAlignment = VerticalAlignment.Center };
-        _coin = new Coin { VerticalAlignment = VerticalAlignment.Center };
-        _record = new SgButton(Panels.Row(Tokens.Space.Base, _recordLabel, _coin), SgButton.Kind.Hero);
-        _record.Click += (_, _) => ToggleRecording();
 
         _transcriptionsLink = new NavLink("Transcriptions") { IsActive = true };
         _dictionaryLink = new NavLink("Dictionary");
@@ -88,7 +79,7 @@ public sealed class MainWindow : ShellWindow
         _faultText.Foreground = Tokens.Brushes.Rose;
         _fault = BuildFault();
 
-        _sectionHost = new ContentControl();
+        _sectionHost = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
 
         _poll = new DispatcherTimer(DispatcherPriority.Background) { Interval = Tokens.Motion.PanelPoll };
         _poll.Tick += (_, _) => SyncFromEngine();
@@ -111,6 +102,15 @@ public sealed class MainWindow : ShellWindow
                     Dispatcher.UIThread.Post(() => ShowFault("AI clean-up rewrote rather than tidied, so the local text was typed. Both are in the history."));
                 }
             };
+            engine.CopyTranscriptAsync = async text =>
+            {
+                await Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    if (Clipboard is { } clipboard)
+                        await clipboard.SetTextAsync(text).ConfigureAwait(true);
+                });
+            };
+            engine.Sent += (_, _) => Dispatcher.UIThread.Post(() => _overlay?.ShowSendFeedback());
             engine.Start();
             _ = PreloadAsync(engine);
         }
@@ -148,8 +148,11 @@ public sealed class MainWindow : ShellWindow
     private StackPanel BuildNav()
     {
         var settings = new NavLink("Settings");
+        _settingsLink = settings;
         settings.Click += (_, _) => ShowSettings();
-        return Panels.Row(Tokens.Space.Section, _transcriptionsLink, _dictionaryLink, settings);
+        var navigation = Panels.Row(Tokens.Space.Section, _transcriptionsLink, _dictionaryLink, settings);
+        navigation.Margin = new Thickness(0, Tokens.Space.Snug, 0, 0);
+        return navigation;
     }
 
     private Border BuildBody()
@@ -158,7 +161,7 @@ public sealed class MainWindow : ShellWindow
         body.Children.Add(Panels.Docked(BuildHero(), Dock.Top));
         body.Children.Add(Panels.Docked(_fault, Dock.Top));
         body.Children.Add(_sectionHost);
-        return new Border { Child = body, ClipToBounds = false, Padding = new Thickness(Tokens.Space.Section, 0, Tokens.Space.Section, Tokens.Space.Wide) };
+        return new Border { Child = body, MaxWidth = Tokens.Layout.MainContentMaxWidth, HorizontalAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(Tokens.Space.Roomy, 0, Tokens.Space.Roomy, Tokens.Space.Roomy) };
     }
 
     /// <summary>The hero: badge, headline, subtitle, the pill; and the readout card beside it.</summary>
@@ -171,37 +174,28 @@ public sealed class MainWindow : ShellWindow
         var badgeRow = Panels.Row(Tokens.Space.Base, _badge, _enabled, onLabel);
         _enabledLabel = (TextBlock)badgeRow.Children[2];
 
-        var copy = Panels.Column(Tokens.Space.Roomy,
-            badgeRow,
-            Panels.Column(0, _headline, _accent),
-            _subtitle,
-            _record);
-        _record.HorizontalAlignment = HorizontalAlignment.Left;
-        _record.Margin = new Thickness(0, Tokens.Space.Snug, 0, 0);
-        copy.VerticalAlignment = VerticalAlignment.Center;
-
-        var readout = Card.Standard(Panels.Column(Tokens.Space.Roomy,
-            Panels.Split(_readoutLabel, Text.Eyebrow(AppPaths.ProductName)),
-            _counter,
-            _bars,
-            _preview), Tokens.Space.Wide);
-        readout.CornerRadius = new CornerRadius(Tokens.Radius.CardLarge);
-        readout.BoxShadow = Tokens.Shadow.Soft;
-        readout.BorderBrush = Tokens.Brushes.Line;
-        readout.VerticalAlignment = VerticalAlignment.Center;
-        readout.MinWidth = Tokens.Layout.BarsCount * (Tokens.Layout.BarWidth + Tokens.Layout.BarGap) + Tokens.Space.Wide * 2;
-
+        _subtitle.Margin = new Thickness(Tokens.Space.Roomy, 0);
+        _subtitle.VerticalAlignment = VerticalAlignment.Center;
+        _bars.IsVisible = false;
+        var timer = Card.Standard(_counter, Tokens.Space.Snug);
+        timer.Padding = new Thickness(Tokens.Space.Base, Tokens.Space.Snug);
+        var readout = Panels.Row(Tokens.Space.Base, _bars, timer);
         var hero = new Grid
         {
-            ClipToBounds = false,
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(Tokens.Layout.ScrollGutter, Tokens.Space.Wide, Tokens.Layout.ScrollGutter, Tokens.Space.Section),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto"),
+            Margin = new Thickness(Tokens.Layout.ScrollGutter * 2, Tokens.Space.Roomy, Tokens.Layout.ScrollGutter * 2, Tokens.Space.Roomy),
         };
-        Grid.SetColumn(copy, 0);
-        Grid.SetColumn(readout, 1);
-        readout.Margin = new Thickness(Tokens.Space.Section, 0, 0, 0);
-        hero.Children.Add(copy);
+        Grid.SetColumn(_subtitle, 1);
+        Grid.SetColumn(readout, 2);
+        Grid.SetRow(_preview, 1);
+        Grid.SetColumnSpan(_preview, 3);
+        _preview.MaxWidth = Tokens.Layout.ContentMaxWidth;
+        _preview.Margin = new Thickness(0, Tokens.Space.Snug, 0, 0);
+        hero.Children.Add(badgeRow);
+        hero.Children.Add(_subtitle);
         hero.Children.Add(readout);
+        hero.Children.Add(_preview);
         return hero;
     }
 
@@ -236,13 +230,15 @@ public sealed class MainWindow : ShellWindow
 
     private void ShowSection(bool transcriptions)
     {
+        if (_settingsLink is not null) _settingsLink.IsActive = false;
+        RefreshHint();
         _transcriptionsLink.IsActive = transcriptions;
         _dictionaryLink.IsActive = !transcriptions;
 
         if (_composition is null)
         {
             _sectionHost.Content = Panels.EmptyState("🎙️", transcriptions ? "No recordings yet" : "Dictionary is empty",
-                transcriptions ? "Press record to start." : "Add the words it keeps getting wrong.");
+                transcriptions ? "Use your shortcut to start dictating." : "Add the words it keeps getting wrong.");
             return;
         }
 
@@ -272,15 +268,24 @@ public sealed class MainWindow : ShellWindow
         await Clipboard.SetTextAsync(records[0].Text).ConfigureAwait(true);
     }
 
-    private void ShowSettings()
+    /// <summary>Shows settings beneath the persistent recording controls.</summary>
+    public void ShowSettings()
     {
-        if (_composition is null) return;
-        var settings = new SettingsWindow(_composition);
-        settings.ModelChanged += (_, _) => ModelChanged();
-        settings.Closed += (_, _) => RefreshHint();
-        _ = settings.ShowDialog(this);
+        _transcriptionsLink.IsActive = false;
+        _dictionaryLink.IsActive = false;
+        if (_settingsLink is not null) _settingsLink.IsActive = true;
+        if (_composition is null)
+        {
+            _sectionHost.Content = Text.Body("Settings");
+            return;
+        }
+        if (_settingsView is null)
+        {
+            _settingsView = new SettingsView(_composition);
+            _settingsView.ModelChanged += (_, _) => ModelChanged();
+        }
+        _sectionHost.Content = _settingsView;
     }
-
     private void ShowAbout() => _ = new AboutWindow().ShowDialog(this);
 
     private void ShowFault(string message)
@@ -309,21 +314,23 @@ public sealed class MainWindow : ShellWindow
     /// <summary>The idle subtitle: which key, which mode, whether AI is on.</summary>
     private void RefreshHint()
     {
-        if (_composition is null) { _subtitle.Text = "Press the button to start."; return; }
+        if (_composition is null) { _subtitle.Text = "Use your shortcut to start dictating."; return; }
 
         var mode = _composition.Settings.Data.Mode switch
         {
-            ActivationMode.Tap => $"Tap {KeyName} anywhere to start, tap again to stop.",
-            ActivationMode.Hold => $"Hold {KeyName} anywhere and talk.",
-            _ => $"Hold {KeyName} and talk, or tap it to start and tap again to stop.",
+            ActivationMode.Tap => $"{KeyName} · Tap to start / stop",
+            ActivationMode.Hold => $"{KeyName} · Hold to talk",
+            _ => $"{KeyName} · Hold or tap to talk",
         };
         var ai = _composition.Settings.Data.AiCleanup ? " Cleaned up by Gemini before it lands." : " Typed exactly as you said it.";
-        _subtitle.Text = mode + ai;
+        _subtitle.Text = mode;
+        ToolTip.SetTip(_subtitle, ai.Trim());
     }
 
     /// <summary>Pulls state from the engine onto the hero.</summary>
     private void SyncFromEngine()
     {
+        RefreshHint();
         var engine = _composition?.Engine;
         if (engine is null)
         {
@@ -363,7 +370,7 @@ public sealed class MainWindow : ShellWindow
         {
             var cleaning = transcribing && _composition!.Settings.Data.AiCleanup;
             if (busy && !IsActive) { _overlay.Present(); _overlay.Sync(recording, transcribing, cleaning, engine.Level, _counter.Text ?? string.Empty, preview); }
-            else if (_overlay.IsVisible) _overlay.Hide();
+            else if (_overlay.IsVisible && !_overlay.IsShowingSendFeedback) _overlay.Hide();
         }
     }
 
@@ -381,13 +388,13 @@ public sealed class MainWindow : ShellWindow
 
     private void SetState(bool recording, bool transcribing)
     {
+        _bars.IsVisible = recording;
+        _badge.IsVisible = recording || transcribing;
         var off = _composition is not null && !_composition.Settings.Data.IsEnabled;
         if (off && !recording && !transcribing)
         {
             _badge.Set("Off", Tokens.Brushes.Faint, live: false);
             _readoutLabel.Text = "OFF";
-            _recordLabel.Text = "Start recording";
-            _coin.IsStop = false;
             return;
         }
 
@@ -395,22 +402,16 @@ public sealed class MainWindow : ShellWindow
         {
             _badge.Set("Listening", Tokens.Brushes.Rose, live: true);
             _readoutLabel.Text = "RECORDING";
-            _recordLabel.Text = "Stop";
-            _coin.IsStop = true;
         }
         else if (transcribing)
         {
             _badge.Set("Working", Tokens.Brushes.AmberMid, live: true);
             _readoutLabel.Text = "TRANSCRIBING";
-            _recordLabel.Text = "Stop";
-            _coin.IsStop = true;
         }
         else
         {
             _badge.Set("Ready", Tokens.Brushes.Brand, live: false);
             _readoutLabel.Text = "IDLE";
-            _recordLabel.Text = "Start recording";
-            _coin.IsStop = false;
         }
     }
 

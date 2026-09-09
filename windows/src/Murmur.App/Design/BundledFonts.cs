@@ -15,10 +15,10 @@ namespace Murmur.App.Design;
 public static class BundledFonts
 {
     /// <summary>The collection key the tokens refer to.</summary>
-    public static Uri Key { get; } = new("fonts:Sidders");
+    public static Uri Key { get; } = new("fonts:Acapella");
 
     /// <summary>Where the files live inside the assembly.</summary>
-    public static Uri Source { get; } = new("avares://Sidders/Assets/Fonts");
+    public static Uri Source { get; } = new("avares://Acapella/Assets/Fonts");
 
     /// <summary>Adds the collection. Safe to call once per process.</summary>
     public static void Register() =>

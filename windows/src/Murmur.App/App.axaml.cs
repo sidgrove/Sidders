@@ -90,7 +90,7 @@ public partial class App : Application
 
         var icon = recording ? s_trayRecording : s_trayIdle;
         if (icon is not null) icons[0].Icon = icon;
-        icons[0].ToolTipText = recording ? "Sidders — recording" : "Sidders — hold the push-to-talk key to dictate";
+        icons[0].ToolTipText = recording ? "Acapella — recording" : "Acapella — hold the push-to-talk key to dictate";
     }
 
     /// <summary>Ends the app from anywhere.</summary>
@@ -104,7 +104,7 @@ public partial class App : Application
     {
         try
         {
-            return new WindowIcon(AssetLoader.Open(new Uri($"avares://Sidders/Assets/{name}")));
+            return new WindowIcon(AssetLoader.Open(new Uri($"avares://Acapella/Assets/{name}")));
         }
         catch (Exception e) when (e is FileNotFoundException or IOException or ArgumentException)
         {
@@ -117,12 +117,7 @@ public partial class App : Application
     private void OnTraySettings(object? sender, EventArgs e)
     {
         ShowMain();
-        if (_main is not null && _composition is not null)
-        {
-            var settings = new SettingsWindow(_composition);
-            settings.ModelChanged += (_, _) => _main.ModelChanged();
-            _ = settings.ShowDialog(_main);
-        }
+        _main?.ShowSettings();
     }
 
     private void OnTrayQuit(object? sender, EventArgs e) => Quit();

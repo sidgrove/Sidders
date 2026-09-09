@@ -33,7 +33,7 @@ public sealed class TranscriptionsView : UserControl
         _search.MaxWidth = Tokens.Layout.ContentMaxWidth / 2;
         _search.HorizontalAlignment = HorizontalAlignment.Right;
 
-        _list = new StackPanel { Spacing = Tokens.Space.Base, Margin = new Thickness(0, Tokens.Space.Roomy, 0, Tokens.Space.Roomy) };
+        _list = new StackPanel { Spacing = Tokens.Space.Base, Margin = new Thickness(Tokens.Layout.ScrollGutter * 2, 0, Tokens.Layout.ScrollGutter * 2, Tokens.Space.Roomy) };
         _count = Text.Caption(string.Empty);
 
         var clear = new SgButton("Clear all", SgButton.Kind.Quiet, compact: true);
@@ -47,7 +47,7 @@ public sealed class TranscriptionsView : UserControl
                 Panels.Docked(Gutter(Panels.Split(_count, clear)), Dock.Bottom),
                 // Padding inside the scroll viewer, not margin outside it: the viewer clips to its
                 // bounds, and without room the cards' shadows are cut off.
-                new ScrollViewer { Content = _list, Padding = new Thickness(Tokens.Layout.ScrollGutter * 2, 0, Tokens.Layout.ScrollGutter * 2, Tokens.Layout.ScrollGutter * 3) },
+                new ScrollViewer { Margin = new Thickness(0, Tokens.Space.Roomy, 0, Tokens.Space.Snug), Content = _list, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto },
             },
         };
 
@@ -151,13 +151,13 @@ public sealed class TranscriptionsView : UserControl
         var actions = Panels.Row(Tokens.Space.Tight, copy, delete);
         actions.VerticalAlignment = VerticalAlignment.Top;
 
-        var body = Panels.Column(Tokens.Space.Base, Text.Reading(record.Text), rawBlock, meta);
+        var body = Panels.Column(Tokens.Space.Roomy, Text.Reading(record.Text), rawBlock, Panels.Split(meta, actions));
         body.Margin = new Thickness(0, 0, Tokens.Space.Roomy, 0);
 
-        var card = Card.Lifting(Panels.Split(body, actions), Tokens.Space.Wide);
+        var card = Card.Standard(body, Tokens.Space.Roomy);
         card.CornerRadius = new CornerRadius(Tokens.Radius.CardLarge);
         card.BorderBrush = Tokens.Brushes.Line;
-        card.BoxShadow = Tokens.Shadow.Soft;
+        card.BoxShadow = Tokens.Shadow.Card;
         return card;
     }
 }

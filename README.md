@@ -1,6 +1,6 @@
 # Acapella
 
-Press a key, say it, and it's typed. Sidders is a dictation app for Windows from [Sidgrove](https://sidgrove.com): hold or tap a key anywhere, speak, and the words land in whatever has focus.
+Press a key, say it, and it's typed. Acapella is a dictation app for Windows from [Sidgrove](https://sidgrove.com): hold or tap a key anywhere, speak, and the words land in whatever has focus.
 
 - **On this machine.** Speech is transcribed locally with NVIDIA's Parakeet model through sherpa-onnx. Nothing leaves your PC unless you turn on AI clean-up.
 - **Live as you speak.** The overlay shows the running transcript while you talk.
@@ -12,7 +12,7 @@ Press a key, say it, and it's typed. Sidders is a dictation app for Windows from
 
 ## Install
 
-Grab the latest `Sidders.exe` from the releases page, or build it yourself:
+Grab the latest `Acapella.exe` from the releases page, or build it yourself:
 
 ```powershell
 cd windows
@@ -20,7 +20,7 @@ cd windows
 .\install.ps1
 ```
 
-`install.ps1` puts Sidders in `%LOCALAPPDATA%\Programs\Sidders`, adds a Start menu entry and an Apps & features entry. On first run it walks you through downloading the speech model (about 600 MB, once), picking your key and trying a dictation.
+`install.ps1` puts Acapella in `%LOCALAPPDATA%\Programs\Acapella`, adds a Start menu entry and an Apps & features entry. On first run it walks you through downloading the speech model (about 600 MB, once), picking your key and trying a dictation.
 
 ## Requirements
 
@@ -38,7 +38,7 @@ The engine is platform-neutral and fully tested against fakes; only the thin `Mu
 
 ## Data
 
-Settings, dictionary, history, log and the speech model live under `%LOCALAPPDATA%\Sidders`.
+Settings, dictionary, history, log and the speech model live under `%LOCALAPPDATA%\Acapella`.
 
 ## Licence
 

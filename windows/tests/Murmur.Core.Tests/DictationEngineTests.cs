@@ -38,6 +38,40 @@ public sealed class DictationEngineTests
         await Wait.UntilAsync(() => engine.State == DictationState.Idle);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Final_transcript_is_copied_before_optional_injection(bool inject)
+    {
+        var hotkey = new FakeHotkeySource();
+        var capture = FakeAudioCapture.Tone(1.0);
+        var injector = new RecordingTextInjector();
+        await using var engine = Build(capture, hotkey, new FakeTranscriber("cloud code."),
+            injector, DictionaryEntry.Correction("cloud code", "Claude Code"));
+        engine.InjectText = inject;
+        string? copied = null;
+        engine.CopyTranscriptAsync = async text =>
+        {
+            await Task.Yield();
+            injector.Injected.ShouldBeEmpty();
+            copied = text;
+        };
+        await DictateAsync(hotkey, engine, capture);
+        copied.ShouldBe("Claude Code");
+        injector.Injected.Count.ShouldBe(inject ? 1 : 0);
+    }
+
+    [Fact]
+    public async Task Clipboard_failure_does_not_prevent_text_delivery()
+    {
+        var hotkey = new FakeHotkeySource();
+        var capture = FakeAudioCapture.Tone(1.0);
+        var injector = new RecordingTextInjector();
+        await using var engine = Build(capture, hotkey, new FakeTranscriber("hello"), injector);
+        engine.CopyTranscriptAsync = _ => Task.FromException(new InvalidOperationException("Clipboard busy"));
+        await DictateAsync(hotkey, engine, capture);
+        injector.Injected.ShouldHaveSingleItem().ShouldBe("hello");
+    }
     [Fact]
     public async Task Speech_is_transcribed_corrected_and_injected()
     {

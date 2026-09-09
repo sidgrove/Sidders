@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-  Installs Sidders for the current user. No administrator rights needed.
+  Installs Acapella for the current user. No administrator rights needed.
 
 .DESCRIPTION
-  Copies windows/dist (from publish.ps1) to %LOCALAPPDATA%\Programs\Sidders, creates a Start
+  Copies windows/dist (from publish.ps1) to %LOCALAPPDATA%\Programs\Acapella, creates a Start
   menu shortcut, registers an entry in Settings → Apps so it can be uninstalled normally,
   and launches it.
 
@@ -17,19 +17,13 @@
 param([switch]$Uninstall)
 $ErrorActionPreference = 'Stop'
 
-$name      = 'Sidders'
+$name      = 'Acapella'
 $target    = Join-Path $env:LOCALAPPDATA "Programs\$name"
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$name.lnk"
 $uninstKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$name"
-$exe       = Join-Path $target 'Sidders.exe'
+$exe       = Join-Path $target 'Acapella.exe'
 
 Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force
-# The app was called Murmur before the rename; tidy that install away so there is one entry.
-Get-Process -Name Murmur -ErrorAction SilentlyContinue | Stop-Process -Force
-Remove-Item (Join-Path $env:LOCALAPPDATA "ProgramsMurmur") -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item (Join-Path $env:APPDATA "MicrosoftWindowsStart MenuProgramsMurmur.lnk") -Force -ErrorAction SilentlyContinue
-Remove-Item "HKCU:SoftwareMicrosoftWindowsCurrentVersionNINSTALLMURMUR" -RECURSE -FORCE -ERRORACTION SILENTLYCONTINUE
-REMOVE-ITEMPROPERTY "HKCU:SOFTWAREMICROSOFTWINDOWSCURRENTVERSIONRUN" -NAME MURMUR -ERRORACTION SILENTLYCONTINUE
 Start-Sleep -Milliseconds 500
 
 if ($Uninstall) {
@@ -37,12 +31,12 @@ if ($Uninstall) {
     Remove-Item $startMenu -Force -ErrorAction SilentlyContinue
     Remove-Item $uninstKey -Recurse -Force -ErrorAction SilentlyContinue
     Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $name -ErrorAction SilentlyContinue
-    Write-Host "removed $name (model and history kept in $env:LOCALAPPDATA\Sidders)"
+    Write-Host "removed $name (model and history kept in $env:LOCALAPPDATA\Acapella)"
     return
 }
 
 $dist = Join-Path $PSScriptRoot 'dist'
-if (-not (Test-Path (Join-Path $dist 'Sidders.exe'))) {
+if (-not (Test-Path (Join-Path $dist 'Acapella.exe'))) {
     throw "nothing to install — run publish.ps1 first"
 }
 

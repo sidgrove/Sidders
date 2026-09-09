@@ -15,6 +15,41 @@ public sealed class AudioDuckingTests
     }
 
     [Fact]
+    public async Task Disabling_the_app_during_recording_restores_audio_and_stops_capture()
+    {
+        var hotkey = new FakeHotkeySource();
+        var ducker = new FakeAudioDucker();
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey,
+            new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
+        { Mode = ActivationMode.Tap, Ducker = ducker };
+        ducker.Calls.ShouldBeEmpty();
+        hotkey.Press();
+        await WaitForAsync(() => engine.State == DictationState.Recording);
+        engine.IsEnabled = false;
+        ducker.Calls.ShouldBe(["duck", "restore"]);
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+        hotkey.Press();
+        ducker.Calls.ShouldBe(["duck", "restore"]);
+    }
+
+    [Fact]
+    public async Task Turning_off_audio_muting_restores_immediately_without_stopping_recording()
+    {
+        var hotkey = new FakeHotkeySource();
+        var ducker = new FakeAudioDucker();
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey,
+            new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
+        { Mode = ActivationMode.Tap, Ducker = ducker };
+        hotkey.Press();
+        await WaitForAsync(() => engine.State == DictationState.Recording);
+        engine.DuckAudio = false;
+        ducker.Calls.ShouldBe(["duck", "restore"]);
+        engine.State.ShouldBe(DictationState.Recording);
+        hotkey.PressCancel();
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+        ducker.Calls.ShouldBe(["duck", "restore"]);
+    }
+    [Fact]
     public async Task Recording_ducks_and_finishing_restores()
     {
         var hotkey = new FakeHotkeySource();

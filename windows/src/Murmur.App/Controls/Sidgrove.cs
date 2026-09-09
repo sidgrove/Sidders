@@ -11,7 +11,7 @@ using Murmur.App.Design;
 
 namespace Murmur.App.Controls;
 
-/// <summary>The page background: the wash with the app's two body blooms.</summary>
+/// <summary>Sidgrove ambient blooms and a fine grid behind opaque content cards.</summary>
 public sealed class WashPanel : Decorator
 {
     /// <inheritdoc />
@@ -21,42 +21,15 @@ public sealed class WashPanel : Decorator
         if (bounds.Width <= 0 || bounds.Height <= 0) return;
 
         context.FillRectangle(Tokens.Brushes.Wash, bounds);
+        context.FillRectangle(Tokens.Brushes.AmbientPeri, bounds);
+        context.FillRectangle(Tokens.Brushes.AmbientPeach, bounds);
+        var grid = new Pen(Tokens.Brushes.GridLine, Tokens.Border.Hairline);
+        for (var x = Tokens.Layout.GridPitch; x < bounds.Width; x += Tokens.Layout.GridPitch)
+            context.DrawLine(grid, new Point(x, 0), new Point(x, bounds.Height));
+        for (var y = Tokens.Layout.GridPitch; y < bounds.Height; y += Tokens.Layout.GridPitch)
+            context.DrawLine(grid, new Point(0, y), new Point(bounds.Width, y));
 
-        // The site's hero: a faint grid that fades out from the top, then the periwinkle
-        // bloom top-right, the peach bloom left, and the small rose orb.
-        var pen = new Pen(Tokens.Brushes.GridLine, Tokens.Border.Hairline);
-        for (var x = 0.0; x < bounds.Width; x += Tokens.Layout.GridPitch) context.DrawLine(pen, new Point(x, 0), new Point(x, bounds.Height));
-        for (var y = 0.0; y < bounds.Height; y += Tokens.Layout.GridPitch) context.DrawLine(pen, new Point(0, y), new Point(bounds.Width, y));
-        context.FillRectangle(new RadialGradientBrush
-        {
-            Center = new RelativePoint(0.5, 0.2, RelativeUnit.Relative),
-            GradientOrigin = new RelativePoint(0.5, 0.2, RelativeUnit.Relative),
-            RadiusX = new RelativeScalar(0.9, RelativeUnit.Relative),
-            RadiusY = new RelativeScalar(0.8, RelativeUnit.Relative),
-            GradientStops =
-            {
-                new GradientStop(Color.FromArgb(0, Tokens.Colors.Wash.R, Tokens.Colors.Wash.G, Tokens.Colors.Wash.B), 0.3),
-                new GradientStop(Tokens.Colors.Wash, 0.75),
-            },
-        }, bounds);
-
-        context.FillRectangle(Bloom(Tokens.Colors.PeriBright, Tokens.Opacity.HeroPeri, new RelativePoint(0.80, -0.05, RelativeUnit.Relative), 0.85, 0.55), bounds);
-        context.FillRectangle(Bloom(Tokens.Colors.Peach, Tokens.Opacity.HeroPeach, new RelativePoint(0.02, 0.42, RelativeUnit.Relative), 0.55, 0.50), bounds);
-        context.FillRectangle(Bloom(Tokens.Colors.RoseSoft, Tokens.Opacity.HeroRose, new RelativePoint(0.86, 0.38, RelativeUnit.Relative), 0.22, 0.30), bounds);
     }
-
-    private static RadialGradientBrush Bloom(Color colour, double opacity, RelativePoint centre, double rx, double ry) => new()
-    {
-        Center = centre,
-        GradientOrigin = centre,
-        RadiusX = new RelativeScalar(rx, RelativeUnit.Relative),
-        RadiusY = new RelativeScalar(ry, RelativeUnit.Relative),
-        GradientStops =
-        {
-            new GradientStop(Color.FromArgb((byte)(opacity * 255), colour.R, colour.G, colour.B), 0),
-            new GradientStop(Color.FromArgb(0, colour.R, colour.G, colour.B), 1),
-        },
-    };
 }
 
 /// <summary>Card surfaces. <c>.sg-card</c>: opaque white, hairline border, tight shadow.</summary>
@@ -693,51 +666,33 @@ public sealed class LevelBars : Control
     }
 }
 
-/// <summary>The Sidgrove mark, ink on nothing — the way the site's favicon draws it.</summary>
+/// <summary>The abstract audio mark shared with the desktop app icon.</summary>
 public sealed class LogoMark : Control
 {
+    private static readonly Lazy<Avalonia.Media.Imaging.Bitmap> Artwork = new(() =>
+    {
+        using var stream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://Acapella/Assets/app-icon.png"));
+        return new Avalonia.Media.Imaging.Bitmap(stream);
+    });
+
     /// <summary>Creates the mark at the token size.</summary>
     public LogoMark()
     {
         Width = Tokens.Layout.LogoTile;
         Height = Tokens.Layout.LogoTile;
+        RenderOptions.SetBitmapInterpolationMode(this, Avalonia.Media.Imaging.BitmapInterpolationMode.HighQuality);
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// A microphone, as simply as it can be drawn: a filled capsule, a hairline cradle
-    /// around it, a stem, a base. Ink on nothing, so it sits on the wash like the wordmark.
-    /// </remarks>
     public override void Render(DrawingContext context)
     {
-        var s = Bounds.Width;
-        var cx = s / 2;
-        var stroke = Math.Max(Tokens.Border.Hairline * 1.6, s * 0.075);
-        var pen = new Pen(Tokens.Brushes.Ink, stroke, lineCap: PenLineCap.Round);
-
-        // Capsule: the head, filled.
-        var headW = s * 0.34;
-        var headH = s * 0.56;
-        context.DrawRectangle(Tokens.Brushes.Ink, null, new RoundedRect(new Rect(cx - headW / 2, s * 0.04, headW, headH), headW / 2));
-
-        // Cradle: a U around the head, open at the top.
-        var cradleR = s * 0.30;
-        var cradleCy = s * 0.44;
-        var geometry = new StreamGeometry();
-        using (var g = geometry.Open())
-        {
-            g.BeginFigure(new Point(cx - cradleR, cradleCy), false);
-            g.ArcTo(new Point(cx + cradleR, cradleCy), new Size(cradleR, cradleR), 0, false, SweepDirection.CounterClockwise);
-            g.EndFigure(false);
-        }
-        context.DrawGeometry(null, pen, geometry);
-
-        // Stem and base.
-        context.DrawLine(pen, new Point(cx, cradleCy + cradleR), new Point(cx, s * 0.90));
-        context.DrawLine(pen, new Point(cx - s * 0.18, s * 0.92), new Point(cx + s * 0.18, s * 0.92));
+        var artwork = Artwork.Value;
+        var scale = Math.Min(Bounds.Width / artwork.Size.Width, Bounds.Height / artwork.Size.Height);
+        var size = new Size(artwork.Size.Width * scale, artwork.Size.Height * scale);
+        var destination = new Rect((Bounds.Width - size.Width) / 2, (Bounds.Height - size.Height) / 2, size.Width, size.Height);
+        context.DrawImage(artwork, new Rect(artwork.Size), destination);
     }
 }
-
 /// <summary>
 /// The pill nav. <c>PillNav.tsx</c>: a translucent ink bed, the active pill solid white and
 /// lifted, bold brand-strong text; inactive muted. Selection by elevation and weight, never hue.

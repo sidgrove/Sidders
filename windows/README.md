@@ -1,6 +1,6 @@
-# Sidders for Windows
+# Acapella for Windows
 
-Sidders is push-to-talk dictation for Windows, on-device. It began as a port of an open-source macOS app, and the project namespaces still carry that name (`Murmur.*`); the product is Sidders.
+Acapella is push-to-talk dictation for Windows, on-device. It began as a port of an open-source macOS app, and the project namespaces still carry that name (`Murmur.*`); the product is Acapella.
 
 > **Status: running on real hardware since 2026-09-08.** Built, installed and driven on a
 > Windows 11 machine: the hook arms, the model loads in ~1.3 s, the front panel, tray,
@@ -15,7 +15,7 @@ Sidders is push-to-talk dictation for Windows, on-device. It began as a port of 
 ```powershell
 cd windows
 .\publish.ps1      # self-contained win-x64 build into windows\dist, runs the self-test
-.\install.ps1      # copies to %LOCALAPPDATA%\Programs\Sidders, Start menu, Apps entry, launches
+.\install.ps1      # copies to %LOCALAPPDATA%\Programs\Acapella, Start menu, Apps entry, launches
 ```
 
 No administrator rights at any point. `install.ps1 -Uninstall` removes it again and keeps the
@@ -26,12 +26,40 @@ First run: open **Settings** (Ctrl+,), press **DOWNLOAD** under Model. It fetche
 **Right Ctrl**, talk, release. Pick a microphone in the same window if the Windows default
 is not the one you dictate into.
 
-Everything the app writes lives in `%LOCALAPPDATA%\Sidders`: `settings.json`,
-`dictionary.txt` (edit it by hand if you like), `transcripts.jsonl`, `sidders.log`, and
+Everything the app writes lives in `%LOCALAPPDATA%\Acapella`: `settings.json`,
+`dictionary.txt` (edit it by hand if you like), `transcripts.jsonl`, `acapella.log`, and
 `models\`.
 
 ---
 
+## Clipboard and spoken sending
+
+Each completed dictation copies its final text to the clipboard as well as inserting it
+into the focused app. Turning off **Type into the focused app** keeps clipboard copying
+and optional history, but suppresses typing and Enter.
+
+In **Settings → Writing**:
+
+- **Send word**: a word at the end of the complete dictation removes itself and presses
+  Enter after text insertion. The default is `blob`; choose `send` if preferred.
+- **Also send if you hear**: comma-separated recognition alternatives, such as `sand`.
+  These match only at the end of the complete dictation, not between sentences or paragraphs.
+- **Send existing text**: the default phrase `send it`, spoken on its own, presses Enter
+  without adding text or replacing the clipboard. Leave either command field blank to disable it.
+
+A brief multicoloured wave confirms that Enter was sent. This is a keypress confirmation;
+what Enter does depends on the focused application.
+
+Closing the main window with **×** leaves Acapella running in the tray. **Quit Acapella**
+stops it completely. Avoid running the older Sidders app alongside Acapella: both can
+respond to the same dictation shortcut and insert overlapping text.
+
+On 2026-09-09, the user verified automatic insertion, send-word removal, the send animation,
+standalone `send it`, and dictation with the main window closed on Windows. The Windows
+solution currently has 201 passing tests; microphone privacy and unplugging a microphone
+remain separate hardware checks.
+
+---
 ## <a id="hardware"></a>What real hardware found
 
 Three bugs, none of which 63 green tests and a passing self-test could have caught:
@@ -47,7 +75,7 @@ Three bugs, none of which 63 green tests and a passing self-test could have caug
    preloads at startup.
 
 And one design gap: every one of those failed *silently*, inside `_ = BeginAsync()`. The
-engine now logs to `sidders.log`, raises `Faulted`, and the front panel shows the message.
+engine now logs to `acapella.log`, raises `Faulted`, and the front panel shows the message.
 
 ---
 

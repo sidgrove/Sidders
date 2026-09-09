@@ -164,7 +164,7 @@ public sealed class DictionaryFile
 
     private static readonly string Header = string.Join(Environment.NewLine,
     [
-        "# Sidders dictionary",
+        "# Acapella dictionary",
         "#",
         "#   Anthropic                 a term — the engine is told this word exists",
         "#   cloud code -> Claude Code a correction — when you hear X, write Y",

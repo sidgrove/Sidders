@@ -34,7 +34,7 @@ public sealed class DictionaryView : UserControl
         var add = new SgButton("Add word", SgButton.Kind.Primary);
         add.Click += (_, _) => ShowEditor(null);
 
-        _list = new StackPanel { Spacing = Tokens.Space.Snug, Margin = new Thickness(0, Tokens.Space.Roomy, 0, Tokens.Space.Roomy) };
+        _list = new StackPanel { Spacing = Tokens.Space.Snug, Margin = new Thickness(Tokens.Layout.ScrollGutter * 2, 0, Tokens.Layout.ScrollGutter * 2, Tokens.Space.Roomy) };
         _count = Text.Caption(string.Empty);
 
         var open = new SgButton("Open dictionary.txt", SgButton.Kind.Quiet, compact: true);
@@ -46,7 +46,7 @@ public sealed class DictionaryView : UserControl
             {
                 Panels.Docked(Gutter(Panels.Split(new Badge("Dictionary"), Panels.Row(Tokens.Space.Base, _search, add))), Dock.Top),
                 Panels.Docked(Gutter(Panels.Split(_count, open)), Dock.Bottom),
-                new ScrollViewer { Content = _list, Padding = new Thickness(Tokens.Layout.ScrollGutter * 2, 0, Tokens.Layout.ScrollGutter * 2, Tokens.Layout.ScrollGutter * 3) },
+                new ScrollViewer { Margin = new Thickness(0, Tokens.Space.Roomy, 0, Tokens.Space.Snug), Content = _list, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto },
             },
         };
 

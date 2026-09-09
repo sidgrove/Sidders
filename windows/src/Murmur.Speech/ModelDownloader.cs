@@ -88,7 +88,7 @@ public sealed class ModelDownloader : IDisposable
     {
         _http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: true);
         _http.Timeout = Timeout.InfiniteTimeSpan;
-        _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Sidders", "1.0"));
+        _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Acapella", "1.0"));
         _base = baseUri ?? DefaultBaseUri;
     }
 
