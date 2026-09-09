@@ -154,45 +154,41 @@ public sealed class PushToTalkHook : IHotkeySource
     private IntPtr _hook;
     private Thread? _thread;
     private uint _threadId;
-    private volatile bool _isDown;
+
+    /// <summary>
+    /// The chord state machine, fed every key event. Order-independent: see
+    /// <see cref="ChordDetector"/> for why a modifier arriving after the trigger counts.
+    /// </summary>
+    private readonly ChordDetector _chord = new(vk => (GetAsyncKeyState(vk) & 0x8000) != 0)
+    {
+        TriggerKey = (int)PushToTalkKey.RightControl,
+    };
 
     /// <summary>Which key triggers dictation.</summary>
-    public PushToTalkKey Key { get; set; } = PushToTalkKey.RightControl;
+    public PushToTalkKey Key
+    {
+        get => (PushToTalkKey)_chord.TriggerKey;
+        set => _chord.TriggerKey = (int)value;
+    }
 
     /// <inheritdoc />
     /// <remarks>Any virtual key, not only the named ones: a user may record whatever they
     /// like in Settings. Read on every event, so a change applies to the next press.</remarks>
     public int VirtualKey
     {
-        get => (int)Key;
-        set => Key = (PushToTalkKey)value;
+        get => _chord.TriggerKey;
+        set => _chord.TriggerKey = value;
     }
 
     /// <inheritdoc />
-    public int Modifiers { get; set; }
+    public int Modifiers
+    {
+        get => _chord.Modifiers;
+        set => _chord.Modifiers = value;
+    }
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int virtualKey);
-
-    /// <summary>Whether every modifier in <see cref="Modifiers"/> is currently down.</summary>
-    /// <remarks>
-    /// <c>GetAsyncKeyState</c> rather than tracking modifier events ourselves: the hook is
-    /// installed after the app starts, so a modifier already held at that moment would
-    /// otherwise be invisible until released.
-    /// </remarks>
-    private bool ModifiersHeld()
-    {
-        var required = (HotkeyModifiers)Modifiers;
-        if (required == HotkeyModifiers.None) return true;
-
-        static bool Down(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
-
-        if (required.HasFlag(HotkeyModifiers.Control) && !Down(VK_CONTROL)) return false;
-        if (required.HasFlag(HotkeyModifiers.Shift) && !Down(VK_SHIFT)) return false;
-        if (required.HasFlag(HotkeyModifiers.Alt) && !Down(VK_MENU)) return false;
-        if (required.HasFlag(HotkeyModifiers.Windows) && !Down(VK_LWIN) && !Down(VK_RWIN)) return false;
-        return true;
-    }
 
     private const int VK_LWIN = 0x5B;
     private const int VK_RWIN = 0x5C;
@@ -269,7 +265,7 @@ public sealed class PushToTalkHook : IHotkeySource
 
         _thread = null;
         _threadId = 0;
-        _isDown = false;
+        _chord.Reset();
 
         if (ReferenceEquals(s_instance, this))
         {
@@ -390,26 +386,15 @@ public sealed class PushToTalkHook : IHotkeySource
 
         var key = Normalize(e);
         if (key == VK_ESCAPE && isDown) CancelPressed?.Invoke(this, EventArgs.Empty);
-        if (key != (int)Key) return false;
 
-        if (isDown)
+        switch (_chord.Feed(key, isDown))
         {
-            // The OS re-fires key-down while a key is held; only the first is a press.
-            if (_isDown) return false;
-
-            // A chord: the trigger only counts if every required modifier is already held.
-            // Release is unconditional, so letting go of the modifier first cannot leave a
-            // recording running.
-            if (!ModifiersHeld()) return false;
-
-            _isDown = true;
-            Pressed?.Invoke(this, EventArgs.Empty);
-        }
-        else
-        {
-            if (!_isDown) return false;
-            _isDown = false;
-            Released?.Invoke(this, EventArgs.Empty);
+            case ChordEvent.Pressed:
+                Pressed?.Invoke(this, EventArgs.Empty);
+                break;
+            case ChordEvent.Released:
+                Released?.Invoke(this, EventArgs.Empty);
+                break;
         }
 
         return false;
