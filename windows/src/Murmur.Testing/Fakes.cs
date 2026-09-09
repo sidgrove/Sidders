@@ -93,6 +93,25 @@ public sealed class FakeHotkeySource : IHotkeySource
     /// <inheritdoc />
     public int Modifiers { get; set; }
 
+    /// <inheritdoc />
+    public event EventHandler<(int VirtualKey, int Modifiers)>? Captured;
+
+    /// <summary>Whether a capture is in progress.</summary>
+    public bool IsCapturing { get; private set; }
+
+    /// <inheritdoc />
+    public void BeginCapture() => IsCapturing = true;
+
+    /// <inheritdoc />
+    public void CancelCapture() => IsCapturing = false;
+
+    /// <summary>Simulates the user pressing a chord while capturing.</summary>
+    public void Capture(int virtualKey, int modifiers)
+    {
+        IsCapturing = false;
+        Captured?.Invoke(this, (virtualKey, modifiers));
+    }
+
     /// <summary>Whether <see cref="Start"/> has been called.</summary>
     public bool IsRunning { get; private set; }
 

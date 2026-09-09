@@ -281,7 +281,9 @@ public sealed class PushToTalkHook : IHotkeySource
 
         try
         {
-            self.Handle(wParam, lParam);
+            // While recording a shortcut the key is consumed, so Win+E does not also open
+            // Explorer and Alt+F does not open a menu. Never otherwise.
+            if (self.Handle(wParam, lParam)) return new IntPtr(1);
         }
         catch (Exception)
         {
@@ -295,12 +297,59 @@ public sealed class PushToTalkHook : IHotkeySource
         return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
     }
 
-    private void Handle(IntPtr wParam, IntPtr lParam)
+    /// <inheritdoc />
+    public event EventHandler<(int VirtualKey, int Modifiers)>? Captured;
+
+    private volatile bool _capturing;
+
+    /// <inheritdoc />
+    public void BeginCapture() => _capturing = true;
+
+    /// <inheritdoc />
+    public void CancelCapture() => _capturing = false;
+
+    private static bool IsModifierKey(int vk) => vk is VK_LCONTROL or VK_RCONTROL or VK_LSHIFT or VK_RSHIFT or VK_LMENU or VK_RMENU or VK_LWIN or VK_RWIN
+        or VK_CONTROL or VK_SHIFT or VK_MENU;
+
+    /// <summary>The modifiers held right now, as flags.</summary>
+    private static int HeldModifiers()
+    {
+        static bool Down(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
+        var flags = HotkeyModifiers.None;
+        if (Down(VK_CONTROL)) flags |= HotkeyModifiers.Control;
+        if (Down(VK_SHIFT)) flags |= HotkeyModifiers.Shift;
+        if (Down(VK_MENU)) flags |= HotkeyModifiers.Alt;
+        if (Down(VK_LWIN) || Down(VK_RWIN)) flags |= HotkeyModifiers.Windows;
+        return (int)flags;
+    }
+
+    /// <summary>Handles one event while recording a shortcut. Returns true to swallow it.</summary>
+    private bool Capture(int key, bool isDown)
+    {
+        if (!IsModifierKey(key))
+        {
+            if (!isDown) return true;
+            _capturing = false;
+            Captured?.Invoke(this, (key, HeldModifiers()));
+            return true;
+        }
+
+        // A modifier released with nothing else held is the shortcut on its own.
+        if (!isDown && HeldModifiers() == 0)
+        {
+            _capturing = false;
+            Captured?.Invoke(this, (key, 0));
+        }
+
+        return true;
+    }
+
+    private bool Handle(IntPtr wParam, IntPtr lParam)
     {
         var e = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
 
         // Ignore anything this app injected itself.
-        if (e.ExtraInfo == InjectedTag) return;
+        if (e.ExtraInfo == InjectedTag) return false;
 
         // ToInt32 rather than a cast: since .NET 7 an explicit (int)IntPtr conversion
         // silently truncates instead of throwing, which CA2020 flags. Window messages are
@@ -308,29 +357,33 @@ public sealed class PushToTalkHook : IHotkeySource
         var message = wParam.ToInt32();
         var isDown = message is WM_KEYDOWN or WM_SYSKEYDOWN;
         var isUp = message is WM_KEYUP or WM_SYSKEYUP;
-        if (!isDown && !isUp) return;
+        if (!isDown && !isUp) return false;
 
-        if (Normalize(e) != (int)Key) return;
+        if (_capturing) return Capture(Normalize(e), isDown);
+
+        if (Normalize(e) != (int)Key) return false;
 
         if (isDown)
         {
             // The OS re-fires key-down while a key is held; only the first is a press.
-            if (_isDown) return;
+            if (_isDown) return false;
 
             // A chord: the trigger only counts if every required modifier is already held.
             // Release is unconditional, so letting go of the modifier first cannot leave a
             // recording running.
-            if (!ModifiersHeld()) return;
+            if (!ModifiersHeld()) return false;
 
             _isDown = true;
             Pressed?.Invoke(this, EventArgs.Empty);
         }
         else
         {
-            if (!_isDown) return;
+            if (!_isDown) return false;
             _isDown = false;
             Released?.Invoke(this, EventArgs.Empty);
         }
+
+        return false;
     }
 
     /// <summary>

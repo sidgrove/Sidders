@@ -332,42 +332,44 @@ public sealed class SettingsWindow : ShellWindow
         var box = Card.Subtle(Panels.Split(Panels.Column(Tokens.Space.Hair, _keyName, hint), Pill.Brand("Record a key")), Tokens.Space.Roomy);
         box.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
         box.Focusable = true;
-        box.PointerPressed += (_, _) =>
-        {
-            _capturing = true;
-            box.Focus();
-            box.BorderBrush = Tokens.Brushes.FocusBorder;
-            hint.Text = "Listening… press a key, or hold modifiers and press a key. Escape to cancel";
-        };
         void Finish()
         {
             _capturing = false;
+            _composition.Engine?.CancelCapture();
             box.BorderBrush = Tokens.Brushes.PanelBorder;
             hint.Text = "Click, then press a key or a combination like Ctrl + Shift + Space";
         }
 
-        // A modifier on its own is a valid key (Right Ctrl), but it is also the start of a
-        // chord — so a modifier is only accepted on its release with nothing else pressed.
+        // Recorded by the keyboard hook, not by this window: the hook sees Win, Alt and
+        // Ctrl combinations that a window never receives, and it swallows them while
+        // recording so the shortcut does not also fire in Windows.
+        box.PointerPressed += (_, _) =>
+        {
+            if (_composition.Engine is null) { hint.Text = "Recording needs the keyboard hook, which is not available here."; return; }
+            _capturing = true;
+            box.Focus();
+            box.BorderBrush = Tokens.Brushes.FocusBorder;
+            hint.Text = "Listening… press a key, or hold modifiers and press a key. Escape to cancel";
+            _composition.Engine.BeginCapture();
+        };
+
+        if (_composition.Engine is { } engine)
+        {
+            EventHandler<(int VirtualKey, int Modifiers)> onCaptured = (_, chord) => Dispatcher.UIThread.Post(() =>
+            {
+                if (!_capturing) return;
+                Finish();
+                SelectKey(chord.VirtualKey, chord.Modifiers);
+            });
+            engine.Captured += onCaptured;
+            Closed += (_, _) => engine.Captured -= onCaptured;
+        }
+
         box.KeyDown += (_, e) =>
         {
-            if (!_capturing) return;
-            e.Handled = true;
-
-            if (e.Key == Avalonia.Input.Key.Escape) { Finish(); return; }
-            if (KeyNames.IsModifier(e.Key)) { hint.Text = "Now press the key to go with it, or release for the modifier alone"; return; }
-
-            Finish();
-            if (KeyNames.ToVirtualKey(e.Key) is { } code) SelectKey(code, KeyNames.ToModifiers(e.KeyModifiers));
-            else hint.Text = $"{e.Key} can't be a push-to-talk key. Try another.";
+            if (_capturing && e.Key == Avalonia.Input.Key.Escape) { e.Handled = true; Finish(); }
         };
-        box.KeyUp += (_, e) =>
-        {
-            if (!_capturing || !KeyNames.IsModifier(e.Key)) return;
-            e.Handled = true;
-            Finish();
-            if (KeyNames.ToVirtualKey(e.Key) is { } code) SelectKey(code, 0);
-        };
-        box.LostFocus += (_, _) => { _capturing = false; box.BorderBrush = Tokens.Brushes.PanelBorder; };
+        box.LostFocus += (_, _) => { if (_capturing) Finish(); };
         return box;
     }
 

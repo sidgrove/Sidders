@@ -1,11 +1,10 @@
 <#
 .SYNOPSIS
-  Renders the app and tray icons in the Sidgrove identity.
+  Renders the app and tray icons: a simple microphone on a brand-blue tile.
 
 .DESCRIPTION
-  The Sidgrove mark — a thick rounded 45° stroke and a dot, "/." — in white on a
-  brand-blue rounded tile, redrawn from the site's favicon.svg geometry. The recording
-  variant swaps the dot for the muted rose so the tray shows state at a glance.
+  The same mark the app draws in its header — a filled capsule, a cradle, a stem and a base
+  — in white on the brand tile. The recording variant lights the capsule rose.
 
   Output:
     src/Murmur.App/Assets/app.ico        16 · 24 · 32 · 48 · 64 · 128 · 256
@@ -22,7 +21,7 @@ New-Item -ItemType Directory -Force $assets | Out-Null
 $brand       = [System.Drawing.Color]::FromArgb(0x68, 0x74, 0xB4)
 $brandStrong = [System.Drawing.Color]::FromArgb(0x3D, 0x47, 0x85)
 $white       = [System.Drawing.Color]::White
-$rose        = [System.Drawing.Color]::FromArgb(0xFF, 0x9F, 0xBC)   # rose-mid on blue reads as "live"
+$rose        = [System.Drawing.Color]::FromArgb(0xFF, 0xB1, 0xC6)
 
 function Render([int]$size, [bool]$recording) {
     $bmp = New-Object System.Drawing.Bitmap $size, $size
@@ -30,7 +29,7 @@ function Render([int]$size, [bool]$recording) {
     $g.SmoothingMode = 'AntiAlias'
     $g.Clear([System.Drawing.Color]::Transparent)
 
-    # Tile: brand gradient, radius ~22% like the app's 10px-on-44px logo box.
+    # Tile.
     $radius = [Math]::Max(2, $size * 0.22)
     $path = New-Object System.Drawing.Drawing2D.GraphicsPath
     $d = $radius * 2
@@ -42,42 +41,46 @@ function Render([int]$size, [bool]$recording) {
     $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Point 0, 0), (New-Object System.Drawing.Point $size, $size), $brand, $brandStrong
     $g.FillPath($brush, $path)
 
-    # The mark, in the favicon's 100-unit space scaled to fill ~76% of the tile.
-    $u = $size / 100.0
-    $g.TranslateTransform(50 * $u, 50 * $u)
-    $g.ScaleTransform(0.76, 0.76)
-    $g.TranslateTransform(-48.1 * $u, -49.15 * $u)
+    # The mark occupies the middle 62% of the tile.
+    $s = $size * 0.62
+    $ox = ($size - $s) / 2
+    $oy = ($size - $s) / 2
+    $cx = $ox + $s / 2
+    $stroke = [Math]::Max(1.0, $s * 0.09)
+    $pen = New-Object System.Drawing.Pen $white, $stroke
+    $pen.StartCap = 'Round'; $pen.EndCap = 'Round'
 
-    # Diagonal: a rounded rect 86.4 x 19 centred at (39.5, 49.15), rotated -44.6°.
-    $state = $g.Save()
-    $g.TranslateTransform(39.5 * $u, 49.15 * $u)
-    $g.RotateTransform(-44.6)
-    $rw = 86.4 * $u; $rh = 19 * $u; $rr = 6.5 * $u
-    $rp = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $rp.AddArc(-$rw/2, -$rh/2, 2*$rr, 2*$rr, 180, 90)
-    $rp.AddArc($rw/2 - 2*$rr, -$rh/2, 2*$rr, 2*$rr, 270, 90)
-    $rp.AddArc($rw/2 - 2*$rr, $rh/2 - 2*$rr, 2*$rr, 2*$rr, 0, 90)
-    $rp.AddArc(-$rw/2, $rh/2 - 2*$rr, 2*$rr, 2*$rr, 90, 90)
-    $rp.CloseFigure()
-    $g.FillPath((New-Object System.Drawing.SolidBrush $white), $rp)
-    $g.Restore($state)
+    # Capsule.
+    $headW = $s * 0.34; $headH = $s * 0.56
+    $hp = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $hr = $headW / 2
+    $hx = $cx - $hr; $hy = $oy + $s * 0.04
+    $hp.AddArc($hx, $hy, $headW, $headW, 180, 180)
+    $hp.AddArc($hx, $hy + $headH - $headW, $headW, $headW, 0, 180)
+    $hp.CloseFigure()
+    $headColour = if ($recording) { $rose } else { $white }
+    $g.FillPath((New-Object System.Drawing.SolidBrush $headColour), $hp)
 
-    # The dot at (82.3, 72.3) r 11.8 — rose while recording.
-    $dot = if ($recording) { $rose } else { $white }
-    $r = 11.8 * $u
-    $g.FillEllipse((New-Object System.Drawing.SolidBrush $dot), (82.3 * $u - $r), (72.3 * $u - $r), 2*$r, 2*$r)
+    # Cradle: the lower half of a circle around the head.
+    $cr = $s * 0.30
+    $ccy = $oy + $s * 0.44
+    $g.DrawArc($pen, ($cx - $cr), ($ccy - $cr), (2 * $cr), (2 * $cr), 0, 180)
+
+    # Stem and base.
+    $g.DrawLine($pen, $cx, ($ccy + $cr), $cx, ($oy + $s * 0.90))
+    $g.DrawLine($pen, ($cx - $s * 0.18), ($oy + $s * 0.92), ($cx + $s * 0.18), ($oy + $s * 0.92))
 
     $g.Dispose()
     return $bmp
 }
 
 function Write-Ico([string]$path, [int[]]$sizes, [bool]$recording) {
-    $images = foreach ($s in $sizes) {
-        $bmp = Render $s $recording
+    $images = foreach ($sz in $sizes) {
+        $bmp = Render $sz $recording
         $ms = New-Object System.IO.MemoryStream
         $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
         $bmp.Dispose()
-        ,@{ Size = $s; Bytes = $ms.ToArray() }
+        ,@{ Size = $sz; Bytes = $ms.ToArray() }
     }
 
     $fs = [System.IO.File]::Create($path)

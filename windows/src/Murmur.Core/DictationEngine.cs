@@ -111,6 +111,19 @@ public sealed class DictationEngine : IAsyncDisposable
         set { _hotkey.VirtualKey = value; Log.Info($"hotkey changed to 0x{value:X2}"); }
     }
 
+    /// <summary>Raised once after <see cref="BeginCapture"/> with what the user pressed. Hook thread.</summary>
+    public event EventHandler<(int VirtualKey, int Modifiers)>? Captured
+    {
+        add => _hotkey.Captured += value;
+        remove => _hotkey.Captured -= value;
+    }
+
+    /// <summary>Records the next chord instead of acting on it.</summary>
+    public void BeginCapture() => _hotkey.BeginCapture();
+
+    /// <summary>Abandons a capture.</summary>
+    public void CancelCapture() => _hotkey.CancelCapture();
+
     /// <summary>Modifiers required with the key, as <see cref="HotkeyModifiers"/> flags.</summary>
     public int HotkeyModifiers
     {

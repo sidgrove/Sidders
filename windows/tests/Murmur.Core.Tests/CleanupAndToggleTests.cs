@@ -25,7 +25,10 @@ public sealed class GeminiCleanerTests
         var cleaned = await cleaner.CleanAsync("um can you uh send me the the Q2 numbers by friday scratch that by thursday", CancellationToken.None);
 
         cleaned.ShouldBe("Can you send me the Q2 numbers by Thursday");
-        server.LastRequestUri!.ToString().ShouldContain("gemini-2.5-flash:generateContent");
+        // The full URL, not a substring: the old (base, relative) construction produced a URI
+        // whose *scheme* was "gemini-2.5-flash", which contained the substring and passed.
+        server.LastRequestUri!.ToString().ShouldBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent");
+        server.LastRequestUri.Scheme.ShouldBe("https");
         server.LastKeyHeader.ShouldBe("test-key");
         server.LastBody.ShouldContain("systemInstruction");
         server.LastBody.ShouldContain("scratch that");
@@ -203,5 +206,32 @@ public sealed class EngineCleanupAndToggleTests
             Calls++;
             return Task.FromResult(reply);
         }
+    }
+}
+
+/// <summary>Recording a chord goes through the hook, not a window.</summary>
+public sealed class ChordCaptureTests
+{
+    [Fact]
+    public async Task Capture_reports_the_chord_and_the_engine_applies_it()
+    {
+        var hotkey = new FakeHotkeySource();
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("x"), new RecordingTextInjector(), () => []);
+
+        (int Key, int Mods)? got = null;
+        engine.Captured += (_, chord) => got = chord;
+
+        engine.BeginCapture();
+        hotkey.IsCapturing.ShouldBeTrue();
+        hotkey.Capture(0x20, (int)(Murmur.Abstractions.HotkeyModifiers.Control | Murmur.Abstractions.HotkeyModifiers.Alt));
+
+        got.ShouldNotBeNull();
+        got.Value.Key.ShouldBe(0x20);
+        got.Value.Mods.ShouldBe(5);
+
+        engine.HotkeyVirtualKey = got.Value.Key;
+        engine.HotkeyModifiers = got.Value.Mods;
+        hotkey.VirtualKey.ShouldBe(0x20);
+        hotkey.Modifiers.ShouldBe(5);
     }
 }

@@ -107,6 +107,26 @@ public interface IHotkeySource : IDisposable
     /// </summary>
     int Modifiers { get; set; }
 
+    /// <summary>
+    /// Raised once after <see cref="BeginCapture"/> with the key and modifiers the user
+    /// pressed. Fired from the hook's thread.
+    /// </summary>
+    event EventHandler<(int VirtualKey, int Modifiers)>? Captured;
+
+    /// <summary>
+    /// Records the next chord instead of triggering on it.
+    /// </summary>
+    /// <remarks>
+    /// Done here, at the hook, rather than in a window: a window never sees Win+key (the
+    /// shell takes it first) and Ctrl combinations collide with the app's own shortcuts. The
+    /// hook sees everything, and while capturing it swallows the keys so Win+E does not also
+    /// open Explorer.
+    /// </remarks>
+    void BeginCapture();
+
+    /// <summary>Abandons a capture in progress.</summary>
+    void CancelCapture();
+
     /// <summary>Begins listening.</summary>
     /// <returns>False if the hook could not be installed.</returns>
     bool Start();

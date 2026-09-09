@@ -101,7 +101,9 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
 
         var body = JsonSerializer.Serialize(request, GeminiJsonContext.Default.GenerateRequest);
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(BaseUri, $"{_model}:generateContent"))
+        // Built as text, not with the (base, relative) overload: "gemini-2.5-flash:generateContent"
+        // parses as an absolute URI whose scheme is "gemini-2.5-flash" and throws. Seen live.
+        using var message = new HttpRequestMessage(HttpMethod.Post, new Uri($"{BaseUri}{_model}:generateContent"))
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json"),
         };
@@ -131,7 +133,7 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
             LastError = null;
             return reply.Trim();
         }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException)
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException or UriFormatException or InvalidOperationException or NotSupportedException)
         {
             LastError = e is TaskCanceledException && !cancellationToken.IsCancellationRequested
                 ? $"no reply within {Deadline.TotalSeconds:0} s"

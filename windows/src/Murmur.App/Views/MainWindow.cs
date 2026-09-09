@@ -341,8 +341,6 @@ public sealed class MainWindow : ShellWindow
         if (off && !recording && !transcribing)
         {
             _badge.Set("Off", Tokens.Brushes.Faint, live: false);
-            _headline.Text = "Paused,";
-            _accent.Text = "the key does nothing.";
             _readoutLabel.Text = "OFF";
             _recordLabel.Text = "Start recording";
             _coin.IsStop = false;
@@ -352,8 +350,6 @@ public sealed class MainWindow : ShellWindow
         if (recording)
         {
             _badge.Set("Listening", Tokens.Brushes.Rose, live: true);
-            _headline.Text = "Go on,";
-            _accent.Text = "I'm listening.";
             _readoutLabel.Text = "RECORDING";
             _recordLabel.Text = "Stop";
             _coin.IsStop = true;
@@ -361,8 +357,6 @@ public sealed class MainWindow : ShellWindow
         else if (transcribing)
         {
             _badge.Set("Working", Tokens.Brushes.AmberMid, live: true);
-            _headline.Text = "One moment,";
-            _accent.Text = "typing it now.";
             _readoutLabel.Text = "TRANSCRIBING";
             _recordLabel.Text = "Stop";
             _coin.IsStop = true;
@@ -370,8 +364,6 @@ public sealed class MainWindow : ShellWindow
         else
         {
             _badge.Set("Ready", Tokens.Brushes.Brand, live: false);
-            _headline.Text = "Say it,";
-            _accent.Text = "and it's typed.";
             _readoutLabel.Text = "IDLE";
             _recordLabel.Text = "Start recording";
             _coin.IsStop = false;
@@ -403,8 +395,8 @@ public sealed class MainWindow : ShellWindow
     /// <summary>Whether the transport is engaged. Exposed for headless tests.</summary>
     public bool IsRecording { get; private set; }
 
-    /// <summary>The state the headline reflects. Exposed for headless tests.</summary>
-    public string StateText => _headline.Text == "Go on," ? "Listening" : _headline.Text == "Say it," ? "Ready" : "Working";
+    /// <summary>The state the readout reflects. Exposed for headless tests.</summary>
+    public string StateText => _readoutLabel.Text switch { "RECORDING" => "Listening", "TRANSCRIBING" => "Working", _ => "Ready" };
 
     /// <summary>The bars. Exposed for headless tests.</summary>
     public LevelBars Bars => _bars;

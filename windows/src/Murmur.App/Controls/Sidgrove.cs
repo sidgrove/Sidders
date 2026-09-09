@@ -701,18 +701,37 @@ public sealed class LogoMark : Control
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A microphone, as simply as it can be drawn: a filled capsule, a hairline cradle
+    /// around it, a stem, a base. Ink on nothing, so it sits on the wash like the wordmark.
+    /// </remarks>
     public override void Render(DrawingContext context)
     {
-        var u = Bounds.Width / 100.0;
-        using (context.PushTransform(Matrix.CreateTranslation(-48.1 * u, -49.15 * u) * Matrix.CreateScale(0.76, 0.76) * Matrix.CreateTranslation(50 * u, 50 * u)))
-        {
-            using (context.PushTransform(Matrix.CreateRotation(-44.6 * Math.PI / 180) * Matrix.CreateTranslation(39.5 * u, 49.15 * u)))
-            {
-                context.DrawRectangle(Tokens.Brushes.Ink, null, new RoundedRect(new Rect(-43.2 * u, -9.5 * u, 86.4 * u, 19 * u), 6.5 * u));
-            }
+        var s = Bounds.Width;
+        var cx = s / 2;
+        var stroke = Math.Max(Tokens.Border.Hairline * 1.6, s * 0.075);
+        var pen = new Pen(Tokens.Brushes.Ink, stroke, lineCap: PenLineCap.Round);
 
-            context.DrawEllipse(Tokens.Brushes.Ink, null, new Point(82.3 * u, 72.3 * u), 11.8 * u, 11.8 * u);
+        // Capsule: the head, filled.
+        var headW = s * 0.34;
+        var headH = s * 0.56;
+        context.DrawRectangle(Tokens.Brushes.Ink, null, new RoundedRect(new Rect(cx - headW / 2, s * 0.04, headW, headH), headW / 2));
+
+        // Cradle: a U around the head, open at the top.
+        var cradleR = s * 0.30;
+        var cradleCy = s * 0.44;
+        var geometry = new StreamGeometry();
+        using (var g = geometry.Open())
+        {
+            g.BeginFigure(new Point(cx - cradleR, cradleCy), false);
+            g.ArcTo(new Point(cx + cradleR, cradleCy), new Size(cradleR, cradleR), 0, false, SweepDirection.CounterClockwise);
+            g.EndFigure(false);
         }
+        context.DrawGeometry(null, pen, geometry);
+
+        // Stem and base.
+        context.DrawLine(pen, new Point(cx, cradleCy + cradleR), new Point(cx, s * 0.90));
+        context.DrawLine(pen, new Point(cx - s * 0.18, s * 0.92), new Point(cx + s * 0.18, s * 0.92));
     }
 }
 
