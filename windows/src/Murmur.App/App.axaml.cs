@@ -3,7 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using Murmur.App.Views;
+using Murmur.Core;
 
 namespace Murmur.App;
 
@@ -25,6 +27,9 @@ public partial class App : Application
 
     /// <summary>Whether to start hidden. Set by <c>Program</c> from the command line.</summary>
     public static bool StartMinimized { get; set; }
+
+    /// <summary>The single-instance claim, so a second launch can ask for the window.</summary>
+    public static SingleInstance? Instance { get; set; }
 
     /// <inheritdoc />
     public override void Initialize()
@@ -59,6 +64,16 @@ public partial class App : Application
 
             s_trayIdle = LoadIcon("tray.ico");
             s_trayRecording = LoadIcon("tray-rec.ico");
+
+            // A second launch from the Start menu means "show me the window".
+            if (Instance is { } instance)
+            {
+                instance.ShowRequested += (_, _) => Dispatcher.UIThread.Post(() =>
+                {
+                    Log.Info("second launch: showing the window");
+                    ShowMain();
+                });
+            }
         }
 
         base.OnFrameworkInitializationCompleted();

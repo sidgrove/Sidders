@@ -26,6 +26,12 @@ public sealed class FaultTests
         for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
     }
 
+    private static async Task UntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (!condition() && DateTime.UtcNow < deadline) await Task.Delay(1);
+    }
+
     [Fact]
     public async Task A_capture_that_throws_becomes_a_fault_and_the_engine_returns_to_idle()
     {
@@ -121,10 +127,14 @@ public sealed class FaultTests
         engine.Completed += (_, r) => completed = r;
 
         hotkey.Press();
-        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        // Deadline-based, not yield-counted: on a slow CI runner a fixed number of yields
+        // can pass before the engine has even entered Recording, and a release that lands
+        // before that is ignored — leaving the recording open and the result null.
+        await UntilAsync(() => engine.State == DictationState.Recording);
+        await UntilAsync(() => engine.Level > 0);
+        await UntilAsync(() => engine.Level == 0);
         hotkey.Release();
-        await SettleAsync(engine);
+        await UntilAsync(() => engine.State == DictationState.Idle);
 
         completed.ShouldNotBeNull().Text.ShouldBe("kept");
         injector.Injected.ShouldBeEmpty();
