@@ -107,12 +107,11 @@ public sealed class GeminiCleanerTests
 /// <summary>How the engine uses a cleaner, and the tap-to-toggle mode.</summary>
 public sealed class EngineCleanupAndToggleTests
 {
-    private static async Task DrainAndReleaseAsync(FakeHotkeySource hotkey, DictationEngine engine)
+    private static async Task DrainAndReleaseAsync(FakeHotkeySource hotkey, DictationEngine engine, FakeAudioCapture capture)
     {
-        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        await Wait.UntilAsync(() => capture.Delivered);
         hotkey.Release();
-        for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
+        await Wait.UntilAsync(() => engine.State == DictationState.Idle);
     }
 
     [Fact]
@@ -122,7 +121,8 @@ public sealed class EngineCleanupAndToggleTests
         var injector = new RecordingTextInjector();
         DictationResult? completed = null;
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("um so hello there."), injector, () => [])
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("um so hello there."), injector, () => [])
         {
             AiCleanup = true,
             Cleaner = new StubCleaner("Hello there"),
@@ -130,7 +130,7 @@ public sealed class EngineCleanupAndToggleTests
         engine.Completed += (_, r) => completed = r;
 
         hotkey.Press();
-        await DrainAndReleaseAsync(hotkey, engine);
+        await DrainAndReleaseAsync(hotkey, engine, capture);
 
         injector.Injected.ShouldBe(["Hello there"]);
         completed.ShouldNotBeNull().CleanedBy.ShouldBe("stub");
@@ -143,7 +143,8 @@ public sealed class EngineCleanupAndToggleTests
         var injector = new RecordingTextInjector();
         var faults = new List<string>();
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("hello there, how are you"), injector, () => [])
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("hello there, how are you"), injector, () => [])
         {
             AiCleanup = true,
             Cleaner = new StubCleaner(null),
@@ -151,7 +152,7 @@ public sealed class EngineCleanupAndToggleTests
         engine.Faulted += (_, m) => faults.Add(m);
 
         hotkey.Press();
-        await DrainAndReleaseAsync(hotkey, engine);
+        await DrainAndReleaseAsync(hotkey, engine, capture);
 
         injector.Injected.ShouldBe(["hello there, how are you"]);
         faults.ShouldHaveSingleItem().ShouldContain("local transcript");
@@ -162,14 +163,15 @@ public sealed class EngineCleanupAndToggleTests
     {
         var hotkey = new FakeHotkeySource();
         var cleaner = new StubCleaner("should not appear");
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("raw"), new RecordingTextInjector(), () => [])
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("raw"), new RecordingTextInjector(), () => [])
         {
             AiCleanup = false,
             Cleaner = cleaner,
         };
 
         hotkey.Press();
-        await DrainAndReleaseAsync(hotkey, engine);
+        await DrainAndReleaseAsync(hotkey, engine, capture);
 
         cleaner.Calls.ShouldBe(0);
     }
@@ -179,20 +181,20 @@ public sealed class EngineCleanupAndToggleTests
     {
         var hotkey = new FakeHotkeySource();
         var injector = new RecordingTextInjector();
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("toggled"), injector, () => [])
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("toggled"), injector, () => [])
         {
             TapToToggle = true,
         };
 
         hotkey.Press();
         hotkey.Release();   // ignored in toggle mode
-        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        await Wait.UntilAsync(() => capture.Delivered);
         engine.State.ShouldBe(DictationState.Recording, "release must not stop a toggled recording");
 
         hotkey.Press();     // second tap stops
         hotkey.Release();
-        for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
+        await Wait.UntilAsync(() => engine.State == DictationState.Idle);
 
         injector.Injected.ShouldBe(["toggled"]);
     }
@@ -216,7 +218,8 @@ public sealed class ChordCaptureTests
     public async Task Capture_reports_the_chord_and_the_engine_applies_it()
     {
         var hotkey = new FakeHotkeySource();
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("x"), new RecordingTextInjector(), () => []);
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("x"), new RecordingTextInjector(), () => []);
 
         (int Key, int Mods)? got = null;
         engine.Captured += (_, chord) => got = chord;
@@ -247,7 +250,8 @@ public sealed class CleanupGuardInEngineTests
         var faults = new List<string>();
         const string raw = "I think this is fine and we should go ahead with the plan as discussed";
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber(raw), injector, () => [])
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber(raw), injector, () => [])
         {
             AiCleanup = true,
             Cleaner = new Summariser(),
@@ -257,10 +261,9 @@ public sealed class CleanupGuardInEngineTests
         engine.Completed += (_, r) => completed = r;
 
         hotkey.Press();
-        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        await Wait.UntilAsync(() => capture.Delivered);
         hotkey.Release();
-        for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
+        await Wait.UntilAsync(() => engine.State == DictationState.Idle);
 
         injector.Injected.ShouldBe([raw]);
         completed.ShouldNotBeNull().CleanedBy.ShouldBeNull();
@@ -279,7 +282,7 @@ public sealed class ActivationAndPreviewTests
 {
     private static async Task WaitForAsync(Func<bool> condition)
     {
-        for (var i = 0; i < 20000 && !condition(); i++) await Task.Yield();
+        await Wait.UntilAsync(() => condition());
     }
 
     [Fact]
@@ -289,7 +292,8 @@ public sealed class ActivationAndPreviewTests
         var injector = new RecordingTextInjector();
         var clock = new FakeClock();
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), injector, () => [], clock)
+        var capture = FakeAudioCapture.Tone(2);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("hello"), injector, () => [], clock)
         {
             Mode = ActivationMode.Automatic,
         };
@@ -308,10 +312,10 @@ public sealed class ActivationAndPreviewTests
         await WaitForAsync(() => engine.State == DictationState.Idle);
         injector.Injected.ShouldBe(["hello"]);
 
-        // Hold: press, wait past the threshold, release ends it.
+        // Hold: press, wait past the threshold, release ends it. This is the fake's second
+        // run, so wait for its second delivery — the first already made Delivered true.
         hotkey.Press();
-        await WaitForAsync(() => engine.Level > 0);
-        await WaitForAsync(() => engine.Level == 0);
+        await Wait.UntilAsync(() => capture.Deliveries == 2);
         clock.Advance(TimeSpan.FromSeconds(1));
         hotkey.Release();
         await WaitForAsync(() => engine.State == DictationState.Idle);
@@ -324,7 +328,8 @@ public sealed class ActivationAndPreviewTests
         var hotkey = new FakeHotkeySource();
         var injector = new RecordingTextInjector();
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), injector, () => [])
+        var capture = FakeAudioCapture.Tone(2);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("hello"), injector, () => [])
         {
             Mode = ActivationMode.Tap,
         };
@@ -345,12 +350,12 @@ public sealed class ActivationAndPreviewTests
         var injector = new RecordingTextInjector();
         DictationResult? completed = null;
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("Um, send it Friday. Scratch that. Send it Thursday, new line, thanks."), injector, () => []);
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("Um, send it Friday. Scratch that. Send it Thursday, new line, thanks."), injector, () => []);
         engine.Completed += (_, r) => completed = r;
 
         hotkey.Press();
-        await WaitForAsync(() => engine.Level > 0);
-        await WaitForAsync(() => engine.Level == 0);
+        await Wait.UntilAsync(() => capture.Delivered);
         hotkey.Release();
         await WaitForAsync(() => engine.State == DictationState.Idle);
 
@@ -364,14 +369,14 @@ public sealed class ActivationAndPreviewTests
         var hotkey = new FakeHotkeySource();
         var injector = new RecordingTextInjector();
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("First thing. Second thing."), injector, () => [])
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("First thing. Second thing."), injector, () => [])
         {
             FullStops = TrailingFullStop.Never,
         };
 
         hotkey.Press();
-        await WaitForAsync(() => engine.Level > 0);
-        await WaitForAsync(() => engine.Level == 0);
+        await Wait.UntilAsync(() => capture.Delivered);
         hotkey.Release();
         await WaitForAsync(() => engine.State == DictationState.Idle);
 

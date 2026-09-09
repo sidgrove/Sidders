@@ -23,13 +23,7 @@ public sealed class FaultTests
 {
     private static async Task SettleAsync(DictationEngine engine)
     {
-        for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
-    }
-
-    private static async Task UntilAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!condition() && DateTime.UtcNow < deadline) await Task.Delay(1);
+        await Wait.UntilAsync(() => engine.State == DictationState.Idle);
     }
 
     [Fact]
@@ -62,8 +56,7 @@ public sealed class FaultTests
         engine.Faulted += (_, m) => faults.Add(m);
 
         hotkey.Press();
-        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        await Wait.UntilAsync(() => capture.Delivered);
         hotkey.Release();
         await SettleAsync(engine);
 
@@ -78,13 +71,13 @@ public sealed class FaultTests
         var injector = new RecordingTextInjector();
         var faults = new List<string>();
 
+        var capture = FakeAudioCapture.Tone(0.6);
         await using var engine = new DictationEngine(
-            FakeAudioCapture.Tone(0.6), hotkey, new NeverReadyTranscriber(), injector, () => []);
+            capture, hotkey, new NeverReadyTranscriber(), injector, () => []);
         engine.Faulted += (_, m) => faults.Add(m);
 
         hotkey.Press();
-        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        await Wait.UntilAsync(() => capture.Delivered);
         hotkey.Release();
         await SettleAsync(engine);
 
@@ -100,12 +93,12 @@ public sealed class FaultTests
         var transcriber = new FakeTranscriber("loaded fine");
         var injector = new RecordingTextInjector();
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, transcriber, injector, () => []);
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, transcriber, injector, () => []);
         transcriber.IsReady.ShouldBeFalse();
 
         hotkey.Press();
-        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        await Wait.UntilAsync(() => capture.Delivered);
         hotkey.Release();
         await SettleAsync(engine);
 
@@ -120,21 +113,17 @@ public sealed class FaultTests
         var injector = new RecordingTextInjector();
         DictationResult? completed = null;
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("kept"), injector, () => [])
+        var capture = FakeAudioCapture.Tone(0.6);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("kept"), injector, () => [])
         {
             InjectText = false,
         };
         engine.Completed += (_, r) => completed = r;
 
         hotkey.Press();
-        // Deadline-based, not yield-counted: on a slow CI runner a fixed number of yields
-        // can pass before the engine has even entered Recording, and a release that lands
-        // before that is ignored — leaving the recording open and the result null.
-        await UntilAsync(() => engine.State == DictationState.Recording);
-        await UntilAsync(() => engine.Level > 0);
-        await UntilAsync(() => engine.Level == 0);
+        await Wait.UntilAsync(() => capture.Delivered);
         hotkey.Release();
-        await UntilAsync(() => engine.State == DictationState.Idle);
+        await Wait.UntilAsync(() => engine.State == DictationState.Idle);
 
         completed.ShouldNotBeNull().Text.ShouldBe("kept");
         injector.Injected.ShouldBeEmpty();
@@ -237,11 +226,9 @@ public sealed class TapGuardTests
         var hotkey = new FakeHotkeySource();
         await using var engine = new DictationEngine(capture, hotkey, transcriber, injector, () => []);
         hotkey.Press();
-        for (var i = 0; i < 20000 && engine.State == DictationState.Recording && !capture.IsCapturing; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        await Wait.UntilAsync(() => capture.Delivered);
         hotkey.Release();
-        for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
+        await Wait.UntilAsync(() => engine.State == DictationState.Idle);
     }
 
     [Fact]

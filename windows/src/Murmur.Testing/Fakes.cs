@@ -44,6 +44,20 @@ public sealed class FakeAudioCapture : IAudioCapture
     /// <inheritdoc />
     public bool IsCapturing { get; private set; }
 
+    /// <summary>
+    /// True once every chunk has been handed over. Monotonic, so a test can wait on it
+    /// without racing the burst — the fake delivers its whole buffer in microseconds, and
+    /// "the level went up and came back down" is not something a poller reliably sees.
+    /// </summary>
+    public bool Delivered => Deliveries > 0;
+
+    /// <summary>
+    /// How many times the whole buffer has been delivered. A test that records twice with
+    /// one fake waits for the second delivery, not for <see cref="Delivered"/>, which the
+    /// first recording already made true.
+    /// </summary>
+    public int Deliveries { get; private set; }
+
     /// <summary>Set to simulate the OS feeding silence because the microphone is blocked.</summary>
     public bool LooksLikeBlockedMicrophone { get; set; }
 
@@ -67,6 +81,8 @@ public sealed class FakeAudioCapture : IAudioCapture
 
                 await Task.Yield();
             }
+
+            Deliveries++;
         }
         finally
         {

@@ -27,17 +27,15 @@ public sealed class DictationEngineTests
         new(capture, hotkey, transcriber, injector, () => dictionary, new FakeClock());
 
     /// <summary>Presses, waits for capture to drain, then releases.</summary>
-    private static async Task DictateAsync(FakeHotkeySource hotkey, DictationEngine engine)
+    private static async Task DictateAsync(FakeHotkeySource hotkey, DictationEngine engine, FakeAudioCapture capture)
     {
         hotkey.Press();
-        for (var i = 0; i < 2000 && engine.State != DictationState.Recording; i++) await Task.Yield();
-        for (var i = 0; i < 20000 && engine.Level == 0; i++) await Task.Yield();
-        // Then let the fake deliver everything it has: Level drops back to 0 once its
-        // buffer is exhausted. Releasing on the first chunk would be a 20 ms tap.
-        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        // Let the fake deliver everything it has before releasing: releasing on the first
+        // chunk would be a 20 ms tap, which the engine drops.
+        await Wait.UntilAsync(() => capture.Delivered);
 
         hotkey.Release();
-        for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
+        await Wait.UntilAsync(() => engine.State == DictationState.Idle);
     }
 
     [Fact]
@@ -47,14 +45,15 @@ public sealed class DictationEngineTests
         var transcriber = new FakeTranscriber("I use cloud code every day");
         var injector = new RecordingTextInjector();
 
+        var capture = FakeAudioCapture.Tone(1.0);
         await using var engine = Build(
-            FakeAudioCapture.Tone(1.0), hotkey, transcriber, injector,
+            capture, hotkey, transcriber, injector,
             DictionaryEntry.Correction("cloud code", "Claude Code"));
 
         DictationResult? completed = null;
         engine.Completed += (_, r) => completed = r;
 
-        await DictateAsync(hotkey, engine);
+        await DictateAsync(hotkey, engine, capture);
 
         injector.Injected.ShouldHaveSingleItem();
         injector.Injected[0].ShouldBe("I use Claude Code every day");
@@ -71,13 +70,14 @@ public sealed class DictationEngineTests
         var injector = new RecordingTextInjector();
 
         // An engine that heard nothing returns empty — and empty must never be typed.
+        var capture = FakeAudioCapture.Silence(0.5);
         await using var engine = Build(
-            FakeAudioCapture.Silence(0.5), hotkey, new FakeTranscriber(""), injector);
+            capture, hotkey, new FakeTranscriber(""), injector);
 
         hotkey.Press();
-        for (var i = 0; i < 2000 && engine.State != DictationState.Recording; i++) await Task.Yield();
+        await Wait.UntilAsync(() => engine.State == DictationState.Recording);
         hotkey.Release();
-        for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
+        await Wait.UntilAsync(() => engine.State == DictationState.Idle);
 
         injector.Injected.ShouldBeEmpty();
     }
@@ -87,8 +87,9 @@ public sealed class DictationEngineTests
     {
         var hotkey = new FakeHotkeySource();
         var injector = new RecordingTextInjector();
+        var capture = FakeAudioCapture.Tone(0.6);
         await using var engine = Build(
-            FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("hello"), injector);
+            capture, hotkey, new FakeTranscriber("hello"), injector);
 
         hotkey.Release();
         for (var i = 0; i < 500; i++) await Task.Yield();
@@ -103,12 +104,13 @@ public sealed class DictationEngineTests
         var hotkey = new FakeHotkeySource();
         var transcriber = new FakeTranscriber("anything");
 
+        var capture = FakeAudioCapture.Tone(0.6);
         await using var engine = Build(
-            FakeAudioCapture.Tone(0.6), hotkey, transcriber, new RecordingTextInjector(),
+            capture, hotkey, transcriber, new RecordingTextInjector(),
             DictionaryEntry.Term("Anthropic"),
             DictionaryEntry.Correction("cloud code", "Claude Code"));
 
-        await DictateAsync(hotkey, engine);
+        await DictateAsync(hotkey, engine, capture);
 
         // Both the plain term and the *write* side of the correction get biased — the whole
         // point is to nudge the recogniser toward the correct spelling.
@@ -120,11 +122,12 @@ public sealed class DictationEngineTests
     public async Task State_returns_to_idle_after_a_dictation()
     {
         var hotkey = new FakeHotkeySource();
+        var capture = FakeAudioCapture.Tone(0.6);
         await using var engine = Build(
-            FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("done"), new RecordingTextInjector());
+            capture, hotkey, new FakeTranscriber("done"), new RecordingTextInjector());
 
         engine.State.ShouldBe(DictationState.Idle);
-        await DictateAsync(hotkey, engine);
+        await DictateAsync(hotkey, engine, capture);
         engine.State.ShouldBe(DictationState.Idle);
         engine.Level.ShouldBe(0);
     }

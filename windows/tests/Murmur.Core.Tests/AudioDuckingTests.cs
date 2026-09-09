@@ -11,7 +11,7 @@ public sealed class AudioDuckingTests
 {
     private static async Task WaitForAsync(Func<bool> condition)
     {
-        for (var i = 0; i < 20000 && !condition(); i++) await Task.Yield();
+        await Wait.UntilAsync(() => condition());
     }
 
     [Fact]
@@ -19,7 +19,8 @@ public sealed class AudioDuckingTests
     {
         var hotkey = new FakeHotkeySource();
         var ducker = new FakeAudioDucker();
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
+        var capture = FakeAudioCapture.Tone(2);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
         {
             Mode = ActivationMode.Hold,
             Ducker = ducker,
@@ -39,7 +40,8 @@ public sealed class AudioDuckingTests
     {
         var hotkey = new FakeHotkeySource();
         var ducker = new FakeAudioDucker();
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
+        var capture = FakeAudioCapture.Tone(2);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
         {
             Mode = ActivationMode.Tap,
             Ducker = ducker,
@@ -58,7 +60,8 @@ public sealed class AudioDuckingTests
     {
         var hotkey = new FakeHotkeySource();
         var ducker = new FakeAudioDucker();
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
+        var capture = FakeAudioCapture.Tone(2);
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
         {
             Mode = ActivationMode.Hold,
             Ducker = ducker,
