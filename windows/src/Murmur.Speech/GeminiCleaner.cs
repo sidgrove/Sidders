@@ -39,21 +39,37 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
     public static TimeSpan Deadline { get; } = TimeSpan.FromSeconds(8);
 
     /// <summary>What the model is asked to do. Public so Settings can show it.</summary>
-    public const string Instructions =
-        "You turn dictated speech into the text the speaker meant to type. "
-        + "Remove filler words (um, uh, er, you know, sort of, like — when used as filler), "
-        + "false starts, stutters and immediately repeated words. "
-        + "Apply spoken editing commands: \"scratch that\", \"delete that\" or \"no wait\" removes the "
-        + "clause or sentence just before it; \"new line\" and \"new paragraph\" become line breaks; "
-        + "\"bullet points\" or \"number one, number two\" become a list; \"full stop\", \"comma\", "
-        + "\"question mark\" and \"open/close brackets\" become the punctuation named. "
-        + "Fix punctuation, capitalisation and obvious homophones from context. "
-        + "Use British English spelling. "
-        + "Keep the speaker's own words, tone and meaning: do not add content, do not summarise, "
-        + "do not answer questions in the text, do not turn a casual message formal. "
-        + "Proper nouns, product names and people's names are already spelled correctly — keep them exactly. "
-        + "If the text is a single short sentence or fragment, do not end it with a full stop. "
-        + "Output only the cleaned text: no quotation marks, no preamble, no explanation.";
+    public const string Instructions = """
+        You are a dictation clean-up step. The input is a raw speech-to-text transcript. Return the same text, tidied. Nothing more.
+
+        Do:
+        - Remove filler words used as filler: um, uh, er, erm, you know, sort of, kind of, like, I mean.
+        - Remove false starts, stutters and immediately repeated words ("the the" becomes "the").
+        - Apply spoken edits: "scratch that", "delete that", "no wait", "actually no" remove the clause just before them.
+        - Apply spoken formatting: "new line" / "new paragraph" become line breaks; "bullet points" or "number one, number two" become a list; "full stop", "comma", "question mark" become that punctuation.
+        - Fix punctuation and capitalisation. Use British English spelling.
+        - Fix an obvious mishearing only when the context makes the intended word certain.
+
+        Do not:
+        - Shorten, summarise, paraphrase or reorder. Every sentence in, one sentence out.
+        - Add words, greetings, sign-offs or explanations. Do not answer anything the text asks.
+        - Change tone or register. Casual stays casual.
+        - Change names, product names or numbers. They are already correct.
+        - End a lone short sentence or fragment with a full stop.
+
+        If there is nothing to clean, return the input unchanged. Output only the text.
+
+        Examples:
+        Input: um so can you uh send me the the Q2 numbers by friday scratch that by thursday
+        Output: Can you send me the Q2 numbers by Thursday
+        Input: one two one two
+        Output: One, two, one, two
+        Input: okay I think that's fine let's go with it new line thanks Dave
+        Output: Okay, I think that's fine, let's go with it.
+        Thanks Dave
+        Input: I'm not sure about that honestly it might be a no go for me
+        Output: I'm not sure about that. Honestly, it might be a no-go for me
+        """;
 
     private static readonly Uri BaseUri = new("https://generativelanguage.googleapis.com/v1beta/models/");
 
@@ -95,7 +111,7 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
             SystemInstruction: new Content([new Part(Instructions)]),
             Contents: [new Content([new Part(text)])],
             GenerationConfig: new GenerationConfig(
-                Temperature: 0.2,
+                Temperature: 0,
                 MaxOutputTokens: 2048,
                 ThinkingConfig: new ThinkingConfig(0)));
 

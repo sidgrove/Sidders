@@ -143,7 +143,7 @@ public sealed class EngineCleanupAndToggleTests
         var injector = new RecordingTextInjector();
         var faults = new List<string>();
 
-        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("hello there"), injector, () => [])
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("hello there, how are you"), injector, () => [])
         {
             AiCleanup = true,
             Cleaner = new StubCleaner(null),
@@ -153,7 +153,7 @@ public sealed class EngineCleanupAndToggleTests
         hotkey.Press();
         await DrainAndReleaseAsync(hotkey, engine);
 
-        injector.Injected.ShouldBe(["hello there"]);
+        injector.Injected.ShouldBe(["hello there, how are you"]);
         faults.ShouldHaveSingleItem().ShouldContain("raw transcript");
     }
 
@@ -233,5 +233,43 @@ public sealed class ChordCaptureTests
         engine.HotkeyModifiers = got.Value.Mods;
         hotkey.VirtualKey.ShouldBe(0x20);
         hotkey.Modifiers.ShouldBe(5);
+    }
+}
+
+/// <summary>The engine keeps the raw transcript when the cleaner rewrites it.</summary>
+public sealed class CleanupGuardInEngineTests
+{
+    [Fact]
+    public async Task A_summarising_cleaner_is_ignored_without_a_fault()
+    {
+        var hotkey = new FakeHotkeySource();
+        var injector = new RecordingTextInjector();
+        var faults = new List<string>();
+        const string raw = "I think this is fine and we should go ahead with the plan as discussed";
+
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber(raw), injector, () => [])
+        {
+            AiCleanup = true,
+            Cleaner = new Summariser(),
+        };
+        engine.Faulted += (_, m) => faults.Add(m);
+        DictationResult? completed = null;
+        engine.Completed += (_, r) => completed = r;
+
+        hotkey.Press();
+        for (var i = 0; i < 20000 && engine.Level == 0 && engine.State == DictationState.Recording; i++) await Task.Yield();
+        for (var i = 0; i < 20000 && engine.Level > 0; i++) await Task.Yield();
+        hotkey.Release();
+        for (var i = 0; i < 20000 && engine.State != DictationState.Idle; i++) await Task.Yield();
+
+        injector.Injected.ShouldBe([raw]);
+        completed.ShouldNotBeNull().CleanedBy.ShouldBeNull();
+        faults.ShouldBeEmpty();
+    }
+
+    private sealed class Summariser : ITranscriptCleaner
+    {
+        public string Name => "summariser";
+        public Task<string?> CleanAsync(string text, CancellationToken cancellationToken) => Task.FromResult<string?>("Go ahead.");
     }
 }

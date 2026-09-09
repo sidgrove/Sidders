@@ -138,7 +138,9 @@ public sealed class MainWindow : ShellWindow
     {
         _enabled = new Controls.Switch { IsChecked = _composition?.Settings.Data.IsEnabled ?? true, VerticalAlignment = VerticalAlignment.Center };
         _enabled.IsCheckedChanged += (_, _) => SetEnabled(_enabled.IsChecked == true);
-        var badgeRow = Panels.Row(Tokens.Space.Base, _badge, _enabled, Text.Eyebrow("On"));
+        var onLabel = Text.Eyebrow("On");
+        onLabel.VerticalAlignment = VerticalAlignment.Center;
+        var badgeRow = Panels.Row(Tokens.Space.Base, _badge, _enabled, onLabel);
         _enabledLabel = (TextBlock)badgeRow.Children[2];
 
         var copy = Panels.Column(Tokens.Space.Roomy,

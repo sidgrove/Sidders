@@ -42,3 +42,47 @@ public static class TranscriptPolish
     public static string Apply(string text, bool dropSingleSentenceFullStop) =>
         dropSingleSentenceFullStop ? DropTrailingFullStopIfSingleSentence(text) : text;
 }
+
+/// <summary>
+/// Sanity checks on what a generative clean-up returns, so a model that summarises or
+/// invents never reaches the user's text field.
+/// </summary>
+public static class CleanupGuard
+{
+    /// <summary>Utterances with fewer words than this are not worth a round trip.</summary>
+    public const int MinimumWords = 3;
+
+    /// <summary>A result with fewer than this share of the input's words was summarised.</summary>
+    public const double MinimumRatio = 0.55;
+
+    /// <summary>A result with more than this share of the input's words had things added.</summary>
+    public const double MaximumRatio = 1.6;
+
+    /// <summary>
+    /// Words a tidy may drop or add regardless of ratio, so "um so hello there" can
+    /// become "Hello there" without tripping the summarising check.
+    /// </summary>
+    public const int Slack = 2;
+
+    /// <summary>Whether the raw text is long enough to be worth cleaning.</summary>
+    public static bool IsWorthCleaning(string raw) => Words(raw) >= MinimumWords;
+
+    /// <summary>
+    /// Whether <paramref name="cleaned"/> is a plausible tidy of <paramref name="raw"/>
+    /// rather than a rewrite. Null or blank is never accepted.
+    /// </summary>
+    public static bool IsPlausible(string raw, string? cleaned)
+    {
+        if (string.IsNullOrWhiteSpace(cleaned)) return false;
+
+        var before = Words(raw);
+        var after = Words(cleaned);
+
+        var floor = Math.Min(before - Slack, (int)Math.Ceiling(before * MinimumRatio));
+        var ceiling = Math.Max(before + Slack, (int)Math.Floor(before * MaximumRatio));
+        return after >= Math.Max(1, floor) && after <= ceiling;
+    }
+
+    private static int Words(string text) =>
+        text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+}

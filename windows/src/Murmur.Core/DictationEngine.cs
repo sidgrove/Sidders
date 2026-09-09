@@ -427,10 +427,16 @@ public sealed class DictationEngine : IAsyncDisposable
         // the cloud being down.
         string? cleanedBy = null;
         var candidate = dictionaryText;
-        if (AiCleanup && Cleaner is { } cleaner)
+        if (AiCleanup && Cleaner is { } cleaner && CleanupGuard.IsWorthCleaning(dictionaryText))
         {
             var cleaned = await cleaner.CleanAsync(dictionaryText, CancellationToken.None).ConfigureAwait(false);
-            if (cleaned is not null)
+            if (cleaned is not null && !CleanupGuard.IsPlausible(dictionaryText, cleaned))
+            {
+                // The model summarised or padded. Wispr-grade means never doing that to
+                // someone's words; the raw transcript wins, quietly.
+                Log.Warn($"AI clean-up rewrote rather than tidied ({dictionaryText.Length} -> {cleaned.Length} chars); kept the raw transcript");
+            }
+            else if (cleaned is not null)
             {
                 candidate = cleaned;
                 cleanedBy = cleaner.Name;
@@ -438,7 +444,7 @@ public sealed class DictationEngine : IAsyncDisposable
             else
             {
                 Log.Warn($"AI clean-up ({cleaner.Name}) returned nothing; typed the raw transcript");
-                Fault($"AI clean-up did not respond, so the raw transcript was typed. Check the key and connection in Settings.");
+                Fault("AI clean-up did not respond, so the raw transcript was typed. Check the key and connection in Settings.");
             }
         }
 

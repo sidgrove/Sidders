@@ -31,3 +31,24 @@ public sealed class TranscriptPolishTests
         TranscriptPolish.Apply("Sounds good.", dropSingleSentenceFullStop: true).ShouldBe("Sounds good");
     }
 }
+
+/// <summary>The clean-up guard: a model that summarises never reaches the text field.</summary>
+public sealed class CleanupGuardTests
+{
+    [Fact]
+    public void Short_utterances_are_not_worth_a_round_trip()
+    {
+        CleanupGuard.IsWorthCleaning("one two").ShouldBeFalse();
+        CleanupGuard.IsWorthCleaning("one two three").ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData("um so can you uh send me the the Q2 numbers by friday", "Can you send me the Q2 numbers by Friday", true)]
+    [InlineData("um so hello there", "Hello there", true)]
+    [InlineData("I think this is fine and we should go ahead with the plan as discussed", "Go ahead.", false)]
+    [InlineData("one two one two", "", false)]
+    [InlineData("one two one two", null, false)]
+    [InlineData("sounds good", "Sounds good, I will send it over to you first thing tomorrow morning", false)]
+    public void Rewrites_are_rejected(string raw, string? cleaned, bool plausible) =>
+        CleanupGuard.IsPlausible(raw, cleaned).ShouldBe(plausible);
+}
