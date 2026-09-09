@@ -1,4 +1,4 @@
-# Sidders
+# Acapella
 
 Press a key, say it, and it's typed. Sidders is a dictation app for Windows from [Sidgrove](https://sidgrove.com): hold or tap a key anywhere, speak, and the words land in whatever has focus.
 
