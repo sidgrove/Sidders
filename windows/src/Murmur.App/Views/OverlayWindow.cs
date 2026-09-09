@@ -5,6 +5,7 @@ using Avalonia.Media;
 using Murmur.Abstractions;
 using Murmur.App.Controls;
 using Murmur.App.Design;
+using Murmur.Core;
 
 namespace Murmur.App.Views;
 
@@ -21,6 +22,10 @@ namespace Murmur.App.Views;
 /// <b>It must never take focus.</b> <c>ShowActivated</c> is off, it is not hit-testable,
 /// and on Windows <see cref="IWindowTweaks.MakeNonActivating"/> sets <c>WS_EX_NOACTIVATE</c>.
 /// </para>
+/// <para>
+/// While recording it shows the tail of the running transcript, so words appear as they
+/// are spoken. That is the single biggest thing that makes dictation feel responsive.
+/// </para>
 /// </remarks>
 public sealed class OverlayWindow : Window
 {
@@ -29,6 +34,7 @@ public sealed class OverlayWindow : Window
     private readonly LevelBars _bars;
     private readonly TextBlock _state;
     private readonly TextBlock _counter;
+    private readonly TextBlock _preview;
 
     /// <summary>Builds the overlay. Not shown until <see cref="Present"/>.</summary>
     public OverlayWindow(IWindowTweaks? tweaks)
@@ -55,6 +61,12 @@ public sealed class OverlayWindow : Window
         _state.VerticalAlignment = VerticalAlignment.Center;
         _counter = Text.Number("00:00", Tokens.Fonts.Body, Tokens.Brushes.Muted);
         _counter.VerticalAlignment = VerticalAlignment.Center;
+        _preview = Text.Muted(string.Empty);
+        _preview.TextWrapping = TextWrapping.NoWrap;
+        _preview.TextTrimming = TextTrimming.None;
+        _preview.MaxWidth = Tokens.Layout.OverlayPreviewWidth;
+        _preview.VerticalAlignment = VerticalAlignment.Center;
+        _preview.IsVisible = false;
 
         var pill = new Border
         {
@@ -67,7 +79,7 @@ public sealed class OverlayWindow : Window
             Padding = new Thickness(Tokens.Space.Roomy, 0, Tokens.Space.Card, 0),
             Margin = new Thickness(Tokens.Layout.OverlayShadowRoom),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = Panels.Row(Tokens.Space.Base, _dot, _state, _bars, _counter),
+            Child = Panels.Row(Tokens.Space.Base, _dot, _state, _bars, _preview, _counter),
         };
 
         Content = pill;
@@ -96,12 +108,36 @@ public sealed class OverlayWindow : Window
     }
 
     /// <summary>Pushes the current state onto the pill.</summary>
-    public void Sync(bool recording, bool transcribing, double level, string counter)
+    /// <param name="recording">The key is down.</param>
+    /// <param name="transcribing">The key is up and the model is working.</param>
+    /// <param name="cleaning">The AI tier is on, so the wait after transcribing is the network.</param>
+    /// <param name="level">Input level, 0…1.</param>
+    /// <param name="counter">Elapsed time, formatted.</param>
+    /// <param name="preview">The running transcript, or empty.</param>
+    public void Sync(bool recording, bool transcribing, bool cleaning, double level, string counter, string preview)
     {
         _bars.IsLive = recording;
         _bars.Level = level;
         _dot.Fill = recording ? Tokens.Brushes.BrandStrong : Tokens.Brushes.AmberMid;
-        _state.Text = transcribing ? "Working on it" : "Listening";
+        _state.Text = recording ? "Listening" : cleaning ? "Cleaning up" : "Working on it";
         _counter.Text = counter;
+
+        var tail = Tail(preview);
+        _preview.Text = tail;
+        _preview.IsVisible = tail.Length > 0;
+
+        // The pill sizes to content, so a growing preview re-centres it.
+        if (IsVisible && tail.Length > 0) Present();
+    }
+
+    /// <summary>The last few words, so the newest speech is always in view.</summary>
+    public static string Tail(string text)
+    {
+        var flat = text.Replace('\n', ' ').Trim();
+        if (flat.Length <= Tokens.Layout.OverlayPreviewChars) return flat;
+
+        var cut = flat[^Tokens.Layout.OverlayPreviewChars..];
+        var space = cut.IndexOf(' ', StringComparison.Ordinal);
+        return "…" + (space > 0 ? cut[(space + 1)..] : cut);
     }
 }

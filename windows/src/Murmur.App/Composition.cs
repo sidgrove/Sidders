@@ -107,20 +107,24 @@ public sealed class Composition : IAsyncDisposable
                 () => dictionary.Entries)
             {
                 InjectText = settings.Data.InjectText,
-                DropSingleSentenceFullStop = settings.Data.DropSingleSentenceFullStop,
-                TapToToggle = settings.Data.TapToToggle,
+                FullStops = settings.Data.FullStops,
+                Mode = settings.Data.Mode,
+                SpokenCommands = settings.Data.SpokenCommands,
+                RemoveFillers = settings.Data.RemoveFillers,
                 AiCleanup = settings.Data.AiCleanup,
                 IsEnabled = settings.Data.IsEnabled,
                 HotkeyModifiers = settings.Data.PushToTalkModifiers,
                 // Key and model are read per call, so pasting a key into Settings works at once.
-                Cleaner = new GeminiCleaner(() => settings.Data.GeminiApiKey, settings.Data.GeminiModel),
+                Cleaner = new GeminiCleaner(() => settings.Data.GeminiApiKey, settings.Data.GeminiModel, customInstructions: () => settings.Data.CustomInstructions),
             };
 
             settings.Changed += (_, _) =>
             {
                 engine.InjectText = settings.Data.InjectText;
-                engine.DropSingleSentenceFullStop = settings.Data.DropSingleSentenceFullStop;
-                engine.TapToToggle = settings.Data.TapToToggle;
+                engine.FullStops = settings.Data.FullStops;
+                engine.Mode = settings.Data.Mode;
+                engine.SpokenCommands = settings.Data.SpokenCommands;
+                engine.RemoveFillers = settings.Data.RemoveFillers;
                 engine.AiCleanup = settings.Data.AiCleanup;
                 engine.IsEnabled = settings.Data.IsEnabled;
                 if (engine.HotkeyVirtualKey != settings.Data.PushToTalkKey) engine.HotkeyVirtualKey = settings.Data.PushToTalkKey;
@@ -128,7 +132,7 @@ public sealed class Composition : IAsyncDisposable
                 if (engine.Cleaner?.Name != (string.IsNullOrWhiteSpace(settings.Data.GeminiModel) ? GeminiCleaner.DefaultModel : settings.Data.GeminiModel.Trim()))
                 {
                     (engine.Cleaner as IDisposable)?.Dispose();
-                    engine.Cleaner = new GeminiCleaner(() => settings.Data.GeminiApiKey, settings.Data.GeminiModel);
+                    engine.Cleaner = new GeminiCleaner(() => settings.Data.GeminiApiKey, settings.Data.GeminiModel, customInstructions: () => settings.Data.CustomInstructions);
                 }
             };
 
@@ -144,6 +148,8 @@ public sealed class Composition : IAsyncDisposable
                     Text = result.Text,
                     Corrections = result.Corrections.Count > 0 ? result.Corrections : null,
                     CleanedBy = result.CleanedBy,
+                    RawText = result.RawText,
+                    CleanupFailed = result.CleanupFailed,
                 });
             };
         }

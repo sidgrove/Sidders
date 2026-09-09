@@ -173,6 +173,7 @@ public sealed class FaultTests
     {
         public event EventHandler? Pressed { add { } remove { } }
         public event EventHandler? Released { add { } remove { } }
+        public event EventHandler? CancelPressed { add { } remove { } }
         public int VirtualKey { get; set; }
         public int Modifiers { get; set; }
         public event EventHandler<(int VirtualKey, int Modifiers)>? Captured { add { } remove { } }

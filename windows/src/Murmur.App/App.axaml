@@ -17,6 +17,7 @@
         <TrayIcon.Menu>
           <NativeMenu>
             <NativeMenuItem Header="Show Sidders" Click="OnTrayShow" />
+            <NativeMenuItem Header="Copy last transcript" Click="OnTrayCopyLast" />
             <NativeMenuItem Header="Settings…" Click="OnTraySettings" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="Quit Sidders" Click="OnTrayQuit" />

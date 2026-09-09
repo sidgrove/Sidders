@@ -619,6 +619,15 @@ public static class Tokens
         /// <summary>Distance of the overlay from the bottom of the work area.</summary>
         public const double OverlayBottomMargin = 48;
 
+        /// <summary>Widest the overlay preview text may grow before it is trimmed from the left.</summary>
+        public const double OverlayPreviewWidth = 420;
+
+        /// <summary>How many characters of the running transcript the overlay shows.</summary>
+        public const int OverlayPreviewChars = 70;
+
+        /// <summary>Height of the multi-line instructions field in Settings.</summary>
+        public const double FieldTallHeight = 96;
+
         /// <summary>Download gauge height.</summary>
         public const double GaugeHeight = 6;
 

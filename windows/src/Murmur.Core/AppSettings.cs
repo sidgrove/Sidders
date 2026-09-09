@@ -75,6 +75,24 @@ public sealed record SettingsData
 
     /// <summary>Whether the push-to-talk key does anything. Off pauses the app without quitting.</summary>
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>How the key works. <see cref="TapToToggle"/> from older files maps onto <see cref="ActivationMode.Tap"/>.</summary>
+    public ActivationMode Mode { get; set; } = ActivationMode.Automatic;
+
+    /// <summary>What happens to a full stop at the very end of a dictation.</summary>
+    public TrailingFullStop FullStops { get; set; } = TrailingFullStop.DropAfterSingleSentence;
+
+    /// <summary>Whether "new line", "full stop", "scratch that" and so on are applied locally.</summary>
+    public bool SpokenCommands { get; set; } = true;
+
+    /// <summary>Whether "um", "er" and friends are removed locally.</summary>
+    public bool RemoveFillers { get; set; } = true;
+
+    /// <summary>The user's own rules for the AI clean-up, appended to the prompt. Null for none.</summary>
+    public string? CustomInstructions { get; set; }
+
+    /// <summary>Whether the first-run walkthrough has been completed or dismissed.</summary>
+    public bool HasOnboarded { get; set; }
 }
 
 /// <summary>Settings, persisted as JSON.</summary>
@@ -117,8 +135,13 @@ public sealed class AppSettings
         {
             if (!File.Exists(path)) return new SettingsData();
 
-            return JsonSerializer.Deserialize(File.ReadAllText(path), SettingsJsonContext.Default.SettingsData)
-                   ?? new SettingsData();
+            var data = JsonSerializer.Deserialize(File.ReadAllText(path), SettingsJsonContext.Default.SettingsData)
+                       ?? new SettingsData();
+
+            // Files written before activation modes existed carry only the tap switch.
+            if (data.TapToToggle && data.Mode == ActivationMode.Automatic) data.Mode = ActivationMode.Tap;
+            if (!data.DropSingleSentenceFullStop && data.FullStops == TrailingFullStop.DropAfterSingleSentence) data.FullStops = TrailingFullStop.Keep;
+            return data;
         }
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
         {

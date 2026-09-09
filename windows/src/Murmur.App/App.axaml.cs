@@ -112,6 +112,8 @@ public partial class App : Application
 
     private void OnTrayQuit(object? sender, EventArgs e) => Quit();
 
+    private void OnTrayCopyLast(object? sender, EventArgs e) => _main?.CopyLast();
+
     private void ShowMain()
     {
         if (_main is null) return;

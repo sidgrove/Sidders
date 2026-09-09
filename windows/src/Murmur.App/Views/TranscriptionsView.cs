@@ -82,7 +82,7 @@ public sealed class TranscriptionsView : UserControl
             _list.Children.Add(Panels.EmptyState(
                 _store.Records.Count == 0 ? "🎙️" : "🔍",
                 _store.Records.Count == 0 ? "No recordings yet" : "No matches",
-                _store.Records.Count == 0 ? "Hold the push-to-talk key and speak." : "Try a different search."));
+                _store.Records.Count == 0 ? "Press the key and speak." : "Try a different search."));
             return;
         }
 
@@ -110,6 +110,32 @@ public sealed class TranscriptionsView : UserControl
         meta.Children.Add(Text.Caption($"{record.AudioSeconds:0.0}s spoken · {record.ProcessingSeconds * 1000:0} ms"));
 
         if (record.CleanedBy is { Length: > 0 } model) meta.Children.Add(Pill.Brand($"AI · {model}"));
+        if (record.CleanupFailed) meta.Children.Add(Pill.Amber("AI fell back · local text typed"));
+
+        // What the model heard, when it differs from what was typed. Without this there is no
+        // way to tell whether a bad result came from the microphone or from the clean-up.
+        var hasRaw = record.RawText is { Length: > 0 } && record.RawText != record.Text;
+        var rawBlock = Text.Muted(record.RawText ?? string.Empty);
+        rawBlock.IsVisible = false;
+        var showRaw = new SgButton("Show what was heard", SgButton.Kind.Quiet, compact: true);
+        showRaw.IsVisible = hasRaw;
+        showRaw.Click += (_, _) =>
+        {
+            rawBlock.IsVisible = !rawBlock.IsVisible;
+            showRaw.Content = rawBlock.IsVisible ? "Hide what was heard" : "Show what was heard";
+        };
+        var copyRaw = new SgButton("Copy raw", SgButton.Kind.Quiet, compact: true);
+        copyRaw.IsVisible = hasRaw;
+        copyRaw.Click += async (_, _) =>
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard is not null && record.RawText is not null) await clipboard.SetTextAsync(record.RawText).ConfigureAwait(true);
+        };
+        if (hasRaw)
+        {
+            meta.Children.Add(showRaw);
+            meta.Children.Add(copyRaw);
+        }
 
         if (record.Corrections is { Count: > 0 } corrections)
         {
@@ -125,7 +151,7 @@ public sealed class TranscriptionsView : UserControl
         var actions = Panels.Row(Tokens.Space.Tight, copy, delete);
         actions.VerticalAlignment = VerticalAlignment.Top;
 
-        var body = Panels.Column(Tokens.Space.Base, Text.Reading(record.Text), meta);
+        var body = Panels.Column(Tokens.Space.Base, Text.Reading(record.Text), rawBlock, meta);
         body.Margin = new Thickness(0, 0, Tokens.Space.Roomy, 0);
 
         var card = Card.Lifting(Panels.Split(body, actions), Tokens.Space.Wide);

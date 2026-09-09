@@ -40,7 +40,24 @@ public static class TranscriptPolish
 
     /// <summary>Applies the enabled rules.</summary>
     public static string Apply(string text, bool dropSingleSentenceFullStop) =>
-        dropSingleSentenceFullStop ? DropTrailingFullStopIfSingleSentence(text) : text;
+        Apply(text, dropSingleSentenceFullStop ? TrailingFullStop.DropAfterSingleSentence : TrailingFullStop.Keep);
+
+    /// <summary>Applies the chosen full-stop rule.</summary>
+    public static string Apply(string text, TrailingFullStop rule) => rule switch
+    {
+        TrailingFullStop.DropAfterSingleSentence => DropTrailingFullStopIfSingleSentence(text),
+        TrailingFullStop.Never => DropTrailingFullStop(text),
+        _ => text,
+    };
+
+    /// <summary>Drops a single trailing full stop whatever came before it. Ellipses stay.</summary>
+    public static string DropTrailingFullStop(string text)
+    {
+        var trimmed = text.TrimEnd();
+        if (trimmed.Length == 0 || trimmed[^1] != '.') return text;
+        if (trimmed.Length >= 2 && trimmed[^2] == '.') return text;
+        return trimmed[..^1];
+    }
 }
 
 /// <summary>

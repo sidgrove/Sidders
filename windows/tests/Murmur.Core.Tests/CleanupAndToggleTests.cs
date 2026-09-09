@@ -154,7 +154,7 @@ public sealed class EngineCleanupAndToggleTests
         await DrainAndReleaseAsync(hotkey, engine);
 
         injector.Injected.ShouldBe(["hello there, how are you"]);
-        faults.ShouldHaveSingleItem().ShouldContain("raw transcript");
+        faults.ShouldHaveSingleItem().ShouldContain("local transcript");
     }
 
     [Fact]
@@ -271,5 +271,110 @@ public sealed class CleanupGuardInEngineTests
     {
         public string Name => "summariser";
         public Task<string?> CleanAsync(string text, CancellationToken cancellationToken) => Task.FromResult<string?>("Go ahead.");
+    }
+}
+
+/// <summary>Automatic mode, cancel, preview and the raw text on results.</summary>
+public sealed class ActivationAndPreviewTests
+{
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        for (var i = 0; i < 20000 && !condition(); i++) await Task.Yield();
+    }
+
+    [Fact]
+    public async Task Automatic_mode_treats_a_quick_tap_as_a_toggle_and_a_hold_as_push_to_talk()
+    {
+        var hotkey = new FakeHotkeySource();
+        var injector = new RecordingTextInjector();
+        var clock = new FakeClock();
+
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), injector, () => [], clock)
+        {
+            Mode = ActivationMode.Automatic,
+        };
+
+        // Tap: press and release within the threshold keeps recording.
+        hotkey.Press();
+        await WaitForAsync(() => engine.State == DictationState.Recording);
+        clock.Advance(TimeSpan.FromMilliseconds(100));
+        hotkey.Release();
+        await Task.Delay(50);
+        engine.State.ShouldBe(DictationState.Recording);
+
+        // The next press stops it.
+        clock.Advance(TimeSpan.FromSeconds(1));
+        hotkey.Press();
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+        injector.Injected.ShouldBe(["hello"]);
+
+        // Hold: press, wait past the threshold, release ends it.
+        hotkey.Press();
+        await WaitForAsync(() => engine.Level > 0);
+        await WaitForAsync(() => engine.Level == 0);
+        clock.Advance(TimeSpan.FromSeconds(1));
+        hotkey.Release();
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+        injector.Injected.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Escape_discards_the_recording_and_types_nothing()
+    {
+        var hotkey = new FakeHotkeySource();
+        var injector = new RecordingTextInjector();
+
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), injector, () => [])
+        {
+            Mode = ActivationMode.Tap,
+        };
+
+        hotkey.Press();
+        await WaitForAsync(() => engine.State == DictationState.Recording);
+        hotkey.PressCancel();
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+
+        injector.Injected.ShouldBeEmpty();
+        engine.Preview.ShouldBe(string.Empty);
+    }
+
+    [Fact]
+    public async Task The_result_carries_the_raw_transcript_and_the_rules_apply_locally()
+    {
+        var hotkey = new FakeHotkeySource();
+        var injector = new RecordingTextInjector();
+        DictationResult? completed = null;
+
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("Um, send it Friday. Scratch that. Send it Thursday, new line, thanks."), injector, () => []);
+        engine.Completed += (_, r) => completed = r;
+
+        hotkey.Press();
+        await WaitForAsync(() => engine.Level > 0);
+        await WaitForAsync(() => engine.Level == 0);
+        hotkey.Release();
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+
+        injector.Injected.ShouldBe(["Send it Thursday\nThanks"]);
+        completed.ShouldNotBeNull().RawText.ShouldBe("Um, send it Friday. Scratch that. Send it Thursday, new line, thanks.");
+    }
+
+    [Fact]
+    public async Task Never_means_no_trailing_full_stop_even_on_prose()
+    {
+        var hotkey = new FakeHotkeySource();
+        var injector = new RecordingTextInjector();
+
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(0.6), hotkey, new FakeTranscriber("First thing. Second thing."), injector, () => [])
+        {
+            FullStops = TrailingFullStop.Never,
+        };
+
+        hotkey.Press();
+        await WaitForAsync(() => engine.Level > 0);
+        await WaitForAsync(() => engine.Level == 0);
+        hotkey.Release();
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+
+        injector.Injected.ShouldBe(["First thing. Second thing"]);
     }
 }

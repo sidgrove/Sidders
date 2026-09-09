@@ -23,8 +23,15 @@ namespace Murmur.Platform.Windows;
 /// </remarks>
 public sealed class SendInputTextInjector : ITextInjector
 {
-    /// <summary>Above this many characters, paste instead of typing.</summary>
-    private const int PasteThreshold = 200;
+    /// <summary>
+    /// Above this many characters, paste instead of typing.
+    /// </summary>
+    /// <remarks>
+    /// Low on purpose. Typing is one message per character and browsers, Teams, Slack and
+    /// the like process each one slowly enough that a sentence visibly types itself out.
+    /// A paste is one message. Short phrases are still typed so the clipboard is left alone.
+    /// </remarks>
+    private const int PasteThreshold = 40;
 
     /// <summary>Characters per <c>SendInput</c> call when typing.</summary>
     private const int ChunkSize = 40;
@@ -134,7 +141,24 @@ public sealed class SendInputTextInjector : ITextInjector
             return await ClipboardPaste(text, cancellationToken).ConfigureAwait(false);
         }
 
-        return TypeWithNewlines(text);
+        return await PasteAsync(text, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Puts the text on the clipboard, presses Ctrl+V, then puts the previous text back.
+    /// Falls back to typing if the clipboard cannot be taken.
+    /// </summary>
+    private static async Task<bool> PasteAsync(string text, CancellationToken cancellationToken)
+    {
+        var previous = Win32Clipboard.GetText();
+        if (!Win32Clipboard.SetText(text)) return TypeWithNewlines(text);
+
+        await Task.Delay(ClipboardSettle, cancellationToken).ConfigureAwait(false);
+        var pasted = PressCtrlV();
+        await Task.Delay(PasteSettle, cancellationToken).ConfigureAwait(false);
+
+        if (previous is not null) Win32Clipboard.SetText(previous);
+        return pasted;
     }
 
     /// <summary>Types arbitrary text as Unicode packets.</summary>

@@ -49,6 +49,10 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
         - Apply spoken formatting: "new line" / "new paragraph" become line breaks; "bullet points" or "number one, number two" become a list; "full stop", "comma", "question mark" become that punctuation.
         - Fix punctuation and capitalisation. Use British English spelling.
         - Fix an obvious mishearing only when the context makes the intended word certain.
+        - Write spoken numbers as figures where a person typing would: "five thirty" is 5:30, "twelve pounds fifty" is £12.50, "twenty percent" is 20%, "two thousand and twenty six" is 2026. Small counts in prose stay as words ("two of us").
+        - Apply self-corrections. When the speaker says "no", "wait", "actually", "sorry", "I mean", "scratch that" or "never mind" and then restates, keep only the restatement: "buy milk no wait buy water" becomes "Buy water". Several in one dictation are all applied.
+        - Hyphenate compounds a writer would: "no-go", "follow-up", "e-mail" stays "email".
+        - Replace a spoken emoji name with the emoji, only when clearly spoken as one: "thumbs up emoji" is 👍, "smiley face" is 🙂. Never add an emoji that was not asked for.
 
         Do not:
         - Shorten, summarise, paraphrase or reorder. Every sentence in, one sentence out.
@@ -71,19 +75,28 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
         Output: I'm not sure about that. Honestly, it might be a no-go for me
         """;
 
+    /// <summary>The full system prompt: <see cref="Instructions"/> plus the user's own rules, if any.</summary>
+    public static string Prompt(string? customInstructions) =>
+        string.IsNullOrWhiteSpace(customInstructions)
+            ? Instructions
+            : Instructions + "\n\nThe user's own rules. They take precedence over everything above:\n" + customInstructions.Trim();
+
     private static readonly Uri BaseUri = new("https://generativelanguage.googleapis.com/v1beta/models/");
 
     private readonly HttpClient _http;
     private readonly Func<string?> _apiKey;
+    private readonly Func<string?> _customInstructions;
     private readonly string _model;
 
     /// <summary>Creates a cleaner that reads the key each call, so a key pasted into Settings works immediately.</summary>
     /// <param name="apiKey">Returns the key, or null/empty when none is configured.</param>
     /// <param name="model">Model id; defaults to <see cref="DefaultModel"/>.</param>
     /// <param name="handler">Transport, for tests.</param>
-    public GeminiCleaner(Func<string?> apiKey, string? model = null, HttpMessageHandler? handler = null)
+    /// <param name="customInstructions">Returns the user's own instructions, appended to the prompt, or null.</param>
+    public GeminiCleaner(Func<string?> apiKey, string? model = null, HttpMessageHandler? handler = null, Func<string?>? customInstructions = null)
     {
         _apiKey = apiKey;
+        _customInstructions = customInstructions ?? (static () => null);
         _model = string.IsNullOrWhiteSpace(model) ? DefaultModel : model.Trim();
         _http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: true);
         _http.Timeout = Deadline;
@@ -108,7 +121,7 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
         if (key is null || string.IsNullOrWhiteSpace(text)) return null;
 
         var request = new GenerateRequest(
-            SystemInstruction: new Content([new Part(Instructions)]),
+            SystemInstruction: new Content([new Part(Prompt(_customInstructions()))]),
             Contents: [new Content([new Part(text)])],
             GenerationConfig: new GenerationConfig(
                 Temperature: 0,

@@ -88,6 +88,12 @@ public sealed class FakeHotkeySource : IHotkeySource
     public event EventHandler? Released;
 
     /// <inheritdoc />
+    public event EventHandler? CancelPressed;
+
+    /// <summary>Raises <see cref="CancelPressed"/>.</summary>
+    public void PressCancel() => CancelPressed?.Invoke(this, EventArgs.Empty);
+
+    /// <inheritdoc />
     public int VirtualKey { get; set; } = 0xA3;
 
     /// <inheritdoc />

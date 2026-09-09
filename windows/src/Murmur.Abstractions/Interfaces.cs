@@ -98,6 +98,12 @@ public interface IHotkeySource : IDisposable
     /// <summary>The key was released.</summary>
     event EventHandler? Released;
 
+    /// <summary>
+    /// Escape was pressed. The engine discards a recording in progress; at any other time
+    /// this is ignored. The key is never swallowed.
+    /// </summary>
+    event EventHandler? CancelPressed;
+
     /// <summary>The virtual-key code being watched. Read on every event, so a change applies to the next press.</summary>
     int VirtualKey { get; set; }
 

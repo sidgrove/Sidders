@@ -1,6 +1,6 @@
 # Sidders for Windows
 
-Sidders is the Windows port of Murmur — push-to-talk dictation, on-device.
+Sidders is push-to-talk dictation for Windows, on-device. It began as a port of an open-source macOS app, and the project namespaces still carry that name (`Murmur.*`); the product is Sidders.
 
 > **Status: running on real hardware since 2026-09-08.** Built, installed and driven on a
 > Windows 11 machine: the hook arms, the model loads in ~1.3 s, the front panel, tray,

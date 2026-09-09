@@ -206,5 +206,5 @@ agent can hear itself speak. Still unverified by a person:
 - The OS microphone-privacy block message appearing live.
 - Unplugging a microphone mid-capture.
 
-**A real-hardware check should start with `Murmur.exe --selftest`, then `murmur.log`, then
+**A real-hardware check should start with `Sidders.exe --selftest`, then `sidders.log`, then
 a single short dictation into Notepad.**

@@ -204,6 +204,11 @@ public sealed class PushToTalkHook : IHotkeySource
     public event EventHandler? Released;
 
     /// <inheritdoc />
+    public event EventHandler? CancelPressed;
+
+    private const int VK_ESCAPE = 0x1B;
+
+    /// <inheritdoc />
     public bool Start()
     {
         StopListening();
@@ -383,7 +388,9 @@ public sealed class PushToTalkHook : IHotkeySource
 
         if (_capturing) return Capture(Normalize(e), isDown);
 
-        if (Normalize(e) != (int)Key) return false;
+        var key = Normalize(e);
+        if (key == VK_ESCAPE && isDown) CancelPressed?.Invoke(this, EventArgs.Empty);
+        if (key != (int)Key) return false;
 
         if (isDown)
         {

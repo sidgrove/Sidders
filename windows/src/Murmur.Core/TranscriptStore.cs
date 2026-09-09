@@ -28,6 +28,12 @@ public sealed record TranscriptRecord
 
     /// <summary>The model that cleaned the text, or null if the raw transcript was typed.</summary>
     public string? CleanedBy { get; init; }
+
+    /// <summary>What the speech model heard, before rules and clean-up. Null in older records.</summary>
+    public string? RawText { get; init; }
+
+    /// <summary>The AI tier was on but its answer was unusable, so the local text was typed.</summary>
+    public bool CleanupFailed { get; init; }
 }
 
 /// <summary>
@@ -127,7 +133,8 @@ public sealed class TranscriptStore
         if (trimmed.Length == 0) return _records;
 
         return _records
-            .Where(r => r.Text.Contains(trimmed, StringComparison.OrdinalIgnoreCase))
+            .Where(r => r.Text.Contains(trimmed, StringComparison.OrdinalIgnoreCase)
+                     || (r.RawText?.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ?? false))
             .ToList();
     }
 

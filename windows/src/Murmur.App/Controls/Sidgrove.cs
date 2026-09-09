@@ -836,6 +836,18 @@ public static class Field
         return box;
     }
 
+    /// <summary>A multi-line text field.</summary>
+    public static TextBox Multiline(string placeholder, string? initial = null)
+    {
+        var box = Text(placeholder, initial);
+        box.AcceptsReturn = true;
+        box.TextWrapping = TextWrapping.Wrap;
+        box.Height = Tokens.Layout.FieldTallHeight;
+        box.VerticalContentAlignment = VerticalAlignment.Top;
+        box.Padding = new Thickness(Tokens.Layout.FieldPadX, Tokens.Space.Snug);
+        return box;
+    }
+
     /// <summary>A search field, with a leading glyph.</summary>
     public static TextBox Search(string placeholder)
     {

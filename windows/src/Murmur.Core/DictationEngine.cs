@@ -16,14 +16,52 @@ public enum DictationState
     Transcribing,
 }
 
+/// <summary>How the key starts and stops a recording.</summary>
+public enum ActivationMode
+{
+    /// <summary>Hold the key down while talking.</summary>
+    Hold,
+
+    /// <summary>Tap to start, tap again to stop. The release is ignored.</summary>
+    Tap,
+
+    /// <summary>
+    /// Both: a quick tap toggles, a longer hold is push-to-talk. Nothing to choose.
+    /// </summary>
+    Automatic,
+}
+
+/// <summary>What happens to a full stop at the very end of a dictation.</summary>
+public enum TrailingFullStop
+{
+    /// <summary>Leave it.</summary>
+    Keep,
+
+    /// <summary>Drop it after a lone sentence; prose keeps it.</summary>
+    DropAfterSingleSentence,
+
+    /// <summary>Never end with one.</summary>
+    Never,
+}
+
 /// <summary>One completed dictation.</summary>
+/// <param name="At">When the key was released.</param>
+/// <param name="AudioDuration">How long the key was held.</param>
+/// <param name="ProcessingTime">Release to finished text.</param>
+/// <param name="Text">The final text, after corrections, rules, clean-up and polish.</param>
+/// <param name="Corrections">Dictionary corrections that fired.</param>
+/// <param name="CleanedBy">The model that cleaned the text, or null.</param>
+/// <param name="RawText">What the speech model heard, before any rules or clean-up.</param>
+/// <param name="CleanupFailed">The AI tier was on but its answer was unusable, so <paramref name="Text"/> is the local result.</param>
 public sealed record DictationResult(
     DateTimeOffset At,
     TimeSpan AudioDuration,
     TimeSpan ProcessingTime,
     string Text,
     IReadOnlyList<AppliedCorrection> Corrections,
-    string? CleanedBy = null);
+    string? CleanedBy = null,
+    string? RawText = null,
+    bool CleanupFailed = false);
 
 /// <summary>
 /// The whole dictation flow: hotkey down, capture, hotkey up, transcribe, correct, inject.
@@ -84,13 +122,55 @@ public sealed class DictationEngine : IAsyncDisposable
     /// <summary>Whether text should be typed into the focused app after a dictation.</summary>
     public bool InjectText { get; set; } = true;
 
-    /// <summary>Whether a lone sentence loses its trailing full stop before typing.</summary>
-    public bool DropSingleSentenceFullStop { get; set; } = true;
+    /// <summary>What happens to a full stop at the very end.</summary>
+    public TrailingFullStop FullStops { get; set; } = TrailingFullStop.DropAfterSingleSentence;
+
+    /// <summary>Shorthand for <see cref="FullStops"/> being the single-sentence rule.</summary>
+    public bool DropSingleSentenceFullStop
+    {
+        get => FullStops == TrailingFullStop.DropAfterSingleSentence;
+        set => FullStops = value ? TrailingFullStop.DropAfterSingleSentence : TrailingFullStop.Keep;
+    }
+
+    /// <summary>How the key works. See <see cref="ActivationMode"/>. Hold by default; settings choose Automatic.</summary>
+    public ActivationMode Mode { get; set; } = ActivationMode.Hold;
+
+    /// <summary>Shorthand for <see cref="Mode"/> being <see cref="ActivationMode.Tap"/>.</summary>
+    public bool TapToToggle
+    {
+        get => Mode == ActivationMode.Tap;
+        set => Mode = value ? ActivationMode.Tap : ActivationMode.Hold;
+    }
 
     /// <summary>
-    /// Tap to start, tap to stop, instead of hold. The release event is ignored.
+    /// In <see cref="ActivationMode.Automatic"/>, a press shorter than this is a tap and
+    /// leaves the recording running; anything longer was a hold and stops on release.
     /// </summary>
-    public bool TapToToggle { get; set; }
+    public static readonly TimeSpan TapThreshold = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>Whether "new line", "full stop", "scratch that" and so on are applied locally.</summary>
+    public bool SpokenCommands { get; set; } = true;
+
+    /// <summary>Whether "um", "er" and friends are removed locally.</summary>
+    public bool RemoveFillers { get; set; } = true;
+
+    /// <summary>
+    /// The running transcript of the current recording, refreshed every
+    /// <see cref="PreviewInterval"/> once a second of audio exists. Empty when idle.
+    /// </summary>
+    public string Preview { get; private set; } = string.Empty;
+
+    /// <summary>Raised when <see cref="Preview"/> changes. Engine thread.</summary>
+    public event EventHandler? PreviewChanged;
+
+    /// <summary>How often the preview is re-decoded while recording.</summary>
+    public static readonly TimeSpan PreviewInterval = TimeSpan.FromMilliseconds(700);
+
+    /// <summary>Preview needs at least this much audio to be worth decoding.</summary>
+    public static readonly TimeSpan PreviewMinimum = TimeSpan.FromSeconds(1);
+
+    private Task? _preview;
+    private DateTimeOffset _pressedAt;
 
     /// <summary>The generative clean-up, or null when none is configured.</summary>
     public ITranscriptCleaner? Cleaner { get; set; }
@@ -167,6 +247,7 @@ public sealed class DictationEngine : IAsyncDisposable
 
         _hotkey.Pressed += OnPressed;
         _hotkey.Released += OnReleased;
+        _hotkey.CancelPressed += OnCancelPressed;
     }
 
     /// <summary>Arms the hotkey.</summary>
@@ -220,18 +301,46 @@ public sealed class DictationEngine : IAsyncDisposable
         else if (State == DictationState.Recording) _ = EndAsync();
     }
 
+    /// <summary>Discards the recording in progress, typing nothing.</summary>
+    public void Cancel()
+    {
+        if (State == DictationState.Recording) _ = AbandonRecordingAsync();
+    }
+
     private void OnPressed(object? sender, EventArgs e)
     {
         if (!IsEnabled) return;
-        if (TapToToggle) TogglePushToTalk();
-        else _ = BeginAsync();
+        _pressedAt = _clock.Now;
+
+        switch (Mode)
+        {
+            case ActivationMode.Hold:
+                _ = BeginAsync();
+                break;
+            case ActivationMode.Tap:
+            case ActivationMode.Automatic:
+                TogglePushToTalk();
+                break;
+        }
     }
 
     private void OnReleased(object? sender, EventArgs e)
     {
         if (!IsEnabled && State == DictationState.Idle) return;
-        if (!TapToToggle) _ = EndAsync();
+
+        switch (Mode)
+        {
+            case ActivationMode.Hold:
+                _ = EndAsync();
+                break;
+            case ActivationMode.Automatic:
+                // A quick tap leaves it running; a hold was push-to-talk and ends here.
+                if (_clock.Now - _pressedAt >= TapThreshold) _ = EndAsync();
+                break;
+        }
     }
+
+    private void OnCancelPressed(object? sender, EventArgs e) => Cancel();
 
     private async Task BeginAsync()
     {
@@ -243,7 +352,9 @@ public sealed class DictationEngine : IAsyncDisposable
             _buffer = [];
             _startedAt = _clock.Now;
             _recording = new CancellationTokenSource();
+            SetPreview(string.Empty);
             SetState(DictationState.Recording);
+            _preview = PreviewLoopAsync(_recording.Token);
         }
         finally
         {
@@ -294,15 +405,72 @@ public sealed class DictationEngine : IAsyncDisposable
         try
         {
             if (State != DictationState.Recording) return;
+            if (_recording is not null) await _recording.CancelAsync().ConfigureAwait(false);
             _buffer = null;
             _recording?.Dispose();
             _recording = null;
+            SetPreview(string.Empty);
             SetState(DictationState.Idle);
+            Log.Info("recording cancelled");
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Re-decodes the audio so far while the key is held, so words appear as they are
+    /// spoken rather than all at once on release.
+    /// </summary>
+    /// <remarks>
+    /// The offline model decodes many times faster than real time, so a whole-buffer pass
+    /// every 700 ms costs a fraction of a second even for a long dictation. A tick that
+    /// finds the previous one still running is skipped, and the final pass waits for the
+    /// last tick so the model is never asked to decode two streams at once.
+    /// </remarks>
+    private async Task PreviewLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(PreviewInterval, cancellationToken).ConfigureAwait(false);
+                if (!_transcriber.IsReady) continue;
+
+                float[]? snapshot;
+                await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    if (State != DictationState.Recording || _buffer is null) return;
+                    if (_buffer.Count < PreviewMinimum.TotalSeconds * AudioChunk.SampleRate) continue;
+                    snapshot = _buffer.ToArray();
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+
+                var text = await _transcriber.TranscribeAsync(snapshot, [], cancellationToken).ConfigureAwait(false);
+                if (!cancellationToken.IsCancellationRequested && State == DictationState.Recording) SetPreview(text.Trim());
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The key was released.
+        }
+        catch (Exception e)
+        {
+            // Preview is a nicety. It must never take the real transcription down with it.
+            Log.Warn($"preview stopped: {e.Message}");
+        }
+    }
+
+    private void SetPreview(string text)
+    {
+        if (text == Preview) return;
+        Preview = text;
+        PreviewChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private async Task EndAsync()
@@ -327,6 +495,7 @@ public sealed class DictationEngine : IAsyncDisposable
 
         try
         {
+            if (_preview is { } preview) await preview.ConfigureAwait(false);
             await ProcessAsync(samples).ConfigureAwait(false);
         }
         catch (Exception e)
@@ -338,6 +507,8 @@ public sealed class DictationEngine : IAsyncDisposable
         {
             _recording?.Dispose();
             _recording = null;
+            _preview = null;
+            SetPreview(string.Empty);
             SetState(DictationState.Idle);
         }
     }
@@ -417,24 +588,35 @@ public sealed class DictationEngine : IAsyncDisposable
 
         if (string.IsNullOrWhiteSpace(raw)) return;
 
-        // The dictionary runs last and unconditionally. Biasing only raises the odds of the
+        // The dictionary runs first and unconditionally. Biasing only raises the odds of the
         // right word; this is the pass that guarantees it.
         var (dictionaryText, applied) = new DictionaryCorrector(entries).Apply(raw);
 
-        // The generative tier sits between the dictionary and the polish: names arrive
-        // already corrected, and the single-sentence rule still applies to what comes back.
-        // If it fails for any reason the local text is used — a dictation is never lost to
-        // the cloud being down.
-        string? cleanedBy = null;
-        var candidate = dictionaryText;
-        if (AiCleanup && Cleaner is { } cleaner && CleanupGuard.IsWorthCleaning(dictionaryText))
+        // Then the rules: spoken commands and fillers, deterministically, so local-only mode
+        // is complete on its own and the AI tier has less to do.
+        var local = SpokenFormatting.Apply(dictionaryText, SpokenCommands, RemoveFillers);
+        if (string.IsNullOrWhiteSpace(local))
         {
-            var cleaned = await cleaner.CleanAsync(dictionaryText, CancellationToken.None).ConfigureAwait(false);
-            if (cleaned is not null && !CleanupGuard.IsPlausible(dictionaryText, cleaned))
+            Log.Info("nothing left after rules (a filler, or a command with nothing before it)");
+            return;
+        }
+
+        // The generative tier sits between the rules and the polish: names arrive already
+        // corrected, and the full-stop rule still applies to what comes back. If it fails
+        // for any reason the local text is used — a dictation is never lost to the cloud
+        // being down.
+        string? cleanedBy = null;
+        var cleanupFailed = false;
+        var candidate = local;
+        if (AiCleanup && Cleaner is { } cleaner && CleanupGuard.IsWorthCleaning(local))
+        {
+            var cleaned = await cleaner.CleanAsync(local, CancellationToken.None).ConfigureAwait(false);
+            if (cleaned is not null && !CleanupGuard.IsPlausible(local, cleaned))
             {
                 // The model summarised or padded. Wispr-grade means never doing that to
-                // someone's words; the raw transcript wins, quietly.
-                Log.Warn($"AI clean-up rewrote rather than tidied ({dictionaryText.Length} -> {cleaned.Length} chars); kept the raw transcript");
+                // someone's words; the local result wins, quietly.
+                Log.Warn($"AI clean-up rewrote rather than tidied ({local.Length} -> {cleaned.Length} chars); kept the local text");
+                cleanupFailed = true;
             }
             else if (cleaned is not null)
             {
@@ -443,14 +625,15 @@ public sealed class DictationEngine : IAsyncDisposable
             }
             else
             {
-                Log.Warn($"AI clean-up ({cleaner.Name}) returned nothing; typed the raw transcript");
-                Fault("AI clean-up did not respond, so the raw transcript was typed. Check the key and connection in Settings.");
+                Log.Warn($"AI clean-up ({cleaner.Name}) returned nothing; typed the local text");
+                cleanupFailed = true;
+                Fault("AI clean-up did not respond, so the local transcript was typed. Check the key and connection in Settings.");
             }
         }
 
         // Polish runs last so a correction or a clean-up that ends a sentence is treated
         // the same as one the engine produced itself.
-        var corrected = TranscriptPolish.Apply(candidate, DropSingleSentenceFullStop);
+        var corrected = TranscriptPolish.Apply(candidate, FullStops);
 
         var result = new DictationResult(
             At: releasedAt,
@@ -458,7 +641,9 @@ public sealed class DictationEngine : IAsyncDisposable
             ProcessingTime: _clock.Now - releasedAt,
             Text: corrected,
             Corrections: applied,
-            CleanedBy: cleanedBy);
+            CleanedBy: cleanedBy,
+            RawText: raw,
+            CleanupFailed: cleanupFailed);
 
         if (cleanedBy is not null || !AiCleanup) LastFault = null;
         Completed?.Invoke(this, result);
@@ -473,9 +658,15 @@ public sealed class DictationEngine : IAsyncDisposable
         }
     }
 
+    private DateTimeOffset _lastFaultAt = DateTimeOffset.MinValue;
+
+    /// <summary>Whether <see cref="Faulted"/> fired within the last second, so a follow-up notice can defer to it.</summary>
+    public bool IsFaultedRecently => _clock.Now - _lastFaultAt < TimeSpan.FromSeconds(1);
+
     private void Fault(string message)
     {
         LastFault = message;
+        _lastFaultAt = _clock.Now;
         Faulted?.Invoke(this, message);
     }
 
@@ -490,6 +681,7 @@ public sealed class DictationEngine : IAsyncDisposable
     {
         _hotkey.Pressed -= OnPressed;
         _hotkey.Released -= OnReleased;
+        _hotkey.CancelPressed -= OnCancelPressed;
         _hotkey.Dispose();
 
         if (_recording is not null)

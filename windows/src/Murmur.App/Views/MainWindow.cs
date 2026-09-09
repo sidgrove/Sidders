@@ -42,8 +42,10 @@ public sealed class MainWindow : ShellWindow
 
     private TranscriptionsView? _transcriptionsView;
     private DictionaryView? _dictionaryView;
+    private readonly TextBlock _preview;
     private DateTimeOffset? _startedAt;
     private string _lastState = string.Empty;
+    private string _lastPreview = string.Empty;
 
     /// <summary>Builds a window with no engine behind it. Used by headless tests.</summary>
     public MainWindow() : this(null) { }
@@ -67,6 +69,10 @@ public sealed class MainWindow : ShellWindow
         _counter = Text.Hero("00:00");
         _readoutLabel = Text.Eyebrow("Idle");
         _bars = new LevelBars(Tokens.Layout.BarsCount, Tokens.Layout.BarsHeight) { HorizontalAlignment = HorizontalAlignment.Center };
+        _preview = Text.Muted(string.Empty);
+        _preview.TextWrapping = Avalonia.Media.TextWrapping.Wrap;
+        _preview.MaxWidth = Tokens.Layout.OverlayPreviewWidth;
+        _preview.IsVisible = false;
 
         _recordLabel = new TextBlock { Text = "Start recording", VerticalAlignment = VerticalAlignment.Center };
         _coin = new Coin { VerticalAlignment = VerticalAlignment.Center };
@@ -98,9 +104,31 @@ public sealed class MainWindow : ShellWindow
         if (_composition?.Engine is { } engine)
         {
             engine.Faulted += (_, message) => Dispatcher.UIThread.Post(() => ShowFault(message));
+            engine.Completed += (_, result) =>
+            {
+                if (result.CleanupFailed && !engine.IsFaultedRecently)
+                {
+                    Dispatcher.UIThread.Post(() => ShowFault("AI clean-up rewrote rather than tidied, so the local text was typed. Both are in the history."));
+                }
+            };
             engine.Start();
             _ = PreloadAsync(engine);
         }
+
+        Opened += (_, _) =>
+        {
+            if (_composition is not null && !_composition.Settings.Data.HasOnboarded) ShowWelcome();
+        };
+    }
+
+    /// <summary>Opens the first-run walkthrough.</summary>
+    public void ShowWelcome()
+    {
+        if (_composition is null) return;
+        var welcome = new WelcomeWindow(_composition);
+        welcome.ModelChanged += (_, _) => ModelChanged();
+        welcome.Closed += (_, _) => RefreshHint();
+        _ = welcome.ShowDialog(this);
     }
 
     private async Task PreloadAsync(DictationEngine engine)
@@ -155,7 +183,8 @@ public sealed class MainWindow : ShellWindow
         var readout = Card.Standard(Panels.Column(Tokens.Space.Roomy,
             Panels.Split(_readoutLabel, Text.Eyebrow(AppPaths.ProductName)),
             _counter,
-            _bars), Tokens.Space.Wide);
+            _bars,
+            _preview), Tokens.Space.Wide);
         readout.CornerRadius = new CornerRadius(Tokens.Radius.CardLarge);
         readout.BoxShadow = Tokens.Shadow.Soft;
         readout.BorderBrush = Tokens.Brushes.Line;
@@ -235,7 +264,8 @@ public sealed class MainWindow : ShellWindow
         else if (_sectionHost.Content is DictionaryView d) d.FocusSearch();
     }
 
-    private async void CopyLast()
+    /// <summary>Copies the most recent transcript. Also reachable from the tray.</summary>
+    public async void CopyLast()
     {
         var records = _composition?.Transcripts.Records;
         if (records is not { Count: > 0 } || Clipboard is null) return;
@@ -281,9 +311,12 @@ public sealed class MainWindow : ShellWindow
     {
         if (_composition is null) { _subtitle.Text = "Press the button to start."; return; }
 
-        var mode = _composition.Settings.Data.TapToToggle
-            ? $"Tap {KeyName} anywhere to start, tap again to stop."
-            : $"Hold {KeyName} anywhere and talk.";
+        var mode = _composition.Settings.Data.Mode switch
+        {
+            ActivationMode.Tap => $"Tap {KeyName} anywhere to start, tap again to stop.",
+            ActivationMode.Hold => $"Hold {KeyName} anywhere and talk.",
+            _ => $"Hold {KeyName} and talk, or tap it to start and tap again to stop.",
+        };
         var ai = _composition.Settings.Data.AiCleanup ? " Cleaned up by Gemini before it lands." : " Typed exactly as you said it.";
         _subtitle.Text = mode + ai;
     }
@@ -318,9 +351,18 @@ public sealed class MainWindow : ShellWindow
 
         App.SetTrayRecording(recording);
 
+        var preview = engine.Preview;
+        if (preview != _lastPreview)
+        {
+            _lastPreview = preview;
+            _preview.Text = preview;
+            _preview.IsVisible = preview.Length > 0;
+        }
+
         if (_overlay is not null)
         {
-            if (busy && !IsActive) { _overlay.Present(); _overlay.Sync(recording, transcribing, engine.Level, _counter.Text ?? string.Empty); }
+            var cleaning = transcribing && _composition!.Settings.Data.AiCleanup;
+            if (busy && !IsActive) { _overlay.Present(); _overlay.Sync(recording, transcribing, cleaning, engine.Level, _counter.Text ?? string.Empty, preview); }
             else if (_overlay.IsVisible) _overlay.Hide();
         }
     }
