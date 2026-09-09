@@ -111,6 +111,8 @@ public sealed class Composition : IAsyncDisposable
                 Mode = settings.Data.Mode,
                 SpokenCommands = settings.Data.SpokenCommands,
                 RemoveFillers = settings.Data.RemoveFillers,
+                Ducker = PlatformFactory.CreateAudioDucker(),
+                DuckAudio = settings.Data.DuckOtherAudio,
                 AiCleanup = settings.Data.AiCleanup,
                 IsEnabled = settings.Data.IsEnabled,
                 HotkeyModifiers = settings.Data.PushToTalkModifiers,
@@ -125,6 +127,7 @@ public sealed class Composition : IAsyncDisposable
                 engine.Mode = settings.Data.Mode;
                 engine.SpokenCommands = settings.Data.SpokenCommands;
                 engine.RemoveFillers = settings.Data.RemoveFillers;
+                engine.DuckAudio = settings.Data.DuckOtherAudio;
                 engine.AiCleanup = settings.Data.AiCleanup;
                 engine.IsEnabled = settings.Data.IsEnabled;
                 if (engine.HotkeyVirtualKey != settings.Data.PushToTalkKey) engine.HotkeyVirtualKey = settings.Data.PushToTalkKey;

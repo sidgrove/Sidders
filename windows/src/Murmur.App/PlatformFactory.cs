@@ -109,6 +109,10 @@ internal static class PlatformFactory
     public static IStartupRegistration? CreateStartupRegistration() =>
         Create<IStartupRegistration>("StartupRegistration", []);
 
+    /// <summary>Creates the per-session audio ducker, or null off Windows.</summary>
+    public static IAudioDucker? CreateAudioDucker() =>
+        Create<IAudioDucker>("SessionDucker", []);
+
     [UnconditionalSuppressMessage(
         "Trimming",
         "IL2026:RequiresUnreferencedCode",

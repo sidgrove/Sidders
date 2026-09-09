@@ -88,6 +88,9 @@ public sealed record SettingsData
     /// <summary>Whether "um", "er" and friends are removed locally.</summary>
     public bool RemoveFillers { get; set; } = true;
 
+    /// <summary>Whether other applications' playback is turned down while recording.</summary>
+    public bool DuckOtherAudio { get; set; } = true;
+
     /// <summary>The user's own rules for the AI clean-up, appended to the prompt. Null for none.</summary>
     public string? CustomInstructions { get; set; }
 

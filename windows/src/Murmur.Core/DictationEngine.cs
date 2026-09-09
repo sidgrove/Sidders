@@ -155,6 +155,17 @@ public sealed class DictationEngine : IAsyncDisposable
     public bool RemoveFillers { get; set; } = true;
 
     /// <summary>
+    /// Turns other applications' playback down while recording. Null where the platform
+    /// offers none.
+    /// </summary>
+    public IAudioDucker? Ducker { get; set; }
+
+    /// <summary>Whether <see cref="Ducker"/> is used. Read at the start of each recording.</summary>
+    public bool DuckAudio { get; set; } = true;
+
+    private bool _ducked;
+
+    /// <summary>
     /// The running transcript of the current recording, refreshed every
     /// <see cref="PreviewInterval"/> once a second of audio exists. Empty when idle.
     /// </summary>
@@ -672,8 +683,32 @@ public sealed class DictationEngine : IAsyncDisposable
 
     private void SetState(DictationState state)
     {
+        var wasRecording = State == DictationState.Recording;
         State = state;
+
+        // Ducking follows the Recording state and nothing else, so every way out of a
+        // recording — finish, cancel, fault — restores the other applications' audio.
+        var isRecording = state == DictationState.Recording;
+        if (isRecording && !wasRecording && DuckAudio && Ducker is { } ducker)
+        {
+            _ducked = true;
+            ducker.Duck();
+            Log.Info("other audio ducked");
+        }
+        else if (wasRecording && !isRecording)
+        {
+            RestoreAudio();
+        }
+
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void RestoreAudio()
+    {
+        if (!_ducked) return;
+        _ducked = false;
+        Ducker?.Restore();
+        Log.Info("other audio restored");
     }
 
     /// <inheritdoc />
@@ -689,6 +724,10 @@ public sealed class DictationEngine : IAsyncDisposable
             await _recording.CancelAsync().ConfigureAwait(false);
             _recording.Dispose();
         }
+
+        // Belt and braces: a recording cut short by shutdown must not leave the user's
+        // music at a whisper.
+        RestoreAudio();
 
         await _capture.DisposeAsync().ConfigureAwait(false);
         await _transcriber.DisposeAsync().ConfigureAwait(false);

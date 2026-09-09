@@ -208,6 +208,19 @@ public sealed class FakeStartupRegistration : IStartupRegistration
     public bool SetEnabled(bool enabled) { IsEnabled = enabled; return true; }
 }
 
+/// <summary>A ducker that only remembers what it was asked.</summary>
+public sealed class FakeAudioDucker : IAudioDucker
+{
+    /// <summary>Every call, in order: "duck" or "restore".</summary>
+    public List<string> Calls { get; } = [];
+
+    /// <inheritdoc />
+    public void Duck() => Calls.Add("duck");
+
+    /// <inheritdoc />
+    public void Restore() => Calls.Add("restore");
+}
+
 /// <summary>A clock you advance by hand.</summary>
 public sealed class FakeClock : IClock
 {

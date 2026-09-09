@@ -191,6 +191,7 @@ public sealed class SettingsWindow : ShellWindow
         var column = Panels.Column(Tokens.Space.Roomy,
             Panels.SwitchRow("Type into the focused app", "Off keeps the history only.", _settings.Data.InjectText, v => Save(_settings.Data with { InjectText = v })),
             Panels.SwitchRow("Keep a history", null, _settings.Data.KeepHistory, v => Save(_settings.Data with { KeepHistory = v })),
+            Panels.SwitchRow("Turn other audio down while I talk", "Music, video and calls drop to a whisper while the key is held and come straight back. Your volume slider is never touched.", _settings.Data.DuckOtherAudio, v => Save(_settings.Data with { DuckOtherAudio = v })),
             Panels.SwitchRow("Drop the full stop after a single sentence", "For chat messages and fragments. Questions and longer dictations keep their punctuation.", _settings.Data.DropSingleSentenceFullStop, v => Save(_settings.Data with { DropSingleSentenceFullStop = v })));
 
         if (_composition.Startup is { } startup)

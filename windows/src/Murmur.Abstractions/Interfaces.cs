@@ -219,6 +219,29 @@ public interface IWindowTweaks
 }
 
 /// <summary>
+/// Turns every other application's playback down while the user is speaking.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Ducks rather than mutes: a call or a video should stay intelligible while a short
+/// dictation goes in. The master volume is never touched — only the per-application
+/// sessions — so a crash mid-hold cannot leave the machine silent.
+/// </para>
+/// <para>
+/// Both calls are best-effort and must never throw; a device that cannot be reached
+/// simply means nothing is ducked. <see cref="Restore"/> is idempotent.
+/// </para>
+/// </remarks>
+public interface IAudioDucker
+{
+    /// <summary>Lowers other applications' playback and remembers their levels.</summary>
+    void Duck();
+
+    /// <summary>Puts back whatever <see cref="Duck"/> lowered.</summary>
+    void Restore();
+}
+
+/// <summary>
 /// Rewrites a transcript into the text the speaker meant to type.
 /// </summary>
 /// <remarks>

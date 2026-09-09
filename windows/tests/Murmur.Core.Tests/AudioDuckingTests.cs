@@ -1,0 +1,83 @@
+using System.Text.Json;
+using Murmur.Core;
+using Murmur.Testing;
+using Shouldly;
+using Xunit;
+
+namespace Murmur.CoreTests;
+
+/// <summary>Other audio goes down when a recording starts and comes back when it ends, however it ends.</summary>
+public sealed class AudioDuckingTests
+{
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        for (var i = 0; i < 20000 && !condition(); i++) await Task.Yield();
+    }
+
+    [Fact]
+    public async Task Recording_ducks_and_finishing_restores()
+    {
+        var hotkey = new FakeHotkeySource();
+        var ducker = new FakeAudioDucker();
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
+        {
+            Mode = ActivationMode.Hold,
+            Ducker = ducker,
+        };
+
+        hotkey.Press();
+        await WaitForAsync(() => engine.State == DictationState.Recording);
+        ducker.Calls.ShouldBe(["duck"]);
+
+        hotkey.Release();
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+        ducker.Calls.ShouldBe(["duck", "restore"]);
+    }
+
+    [Fact]
+    public async Task Cancelling_restores()
+    {
+        var hotkey = new FakeHotkeySource();
+        var ducker = new FakeAudioDucker();
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
+        {
+            Mode = ActivationMode.Tap,
+            Ducker = ducker,
+        };
+
+        hotkey.Press();
+        await WaitForAsync(() => engine.State == DictationState.Recording);
+        hotkey.PressCancel();
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+
+        ducker.Calls.ShouldBe(["duck", "restore"]);
+    }
+
+    [Fact]
+    public async Task Switched_off_it_never_touches_the_ducker()
+    {
+        var hotkey = new FakeHotkeySource();
+        var ducker = new FakeAudioDucker();
+        await using var engine = new DictationEngine(FakeAudioCapture.Tone(2), hotkey, new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
+        {
+            Mode = ActivationMode.Hold,
+            Ducker = ducker,
+            DuckAudio = false,
+        };
+
+        hotkey.Press();
+        await WaitForAsync(() => engine.State == DictationState.Recording);
+        hotkey.Release();
+        await WaitForAsync(() => engine.State == DictationState.Idle);
+
+        ducker.Calls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Old_settings_files_default_the_switch_on()
+    {
+        const string old = """{"PushToTalkKey":124}""";
+        var data = JsonSerializer.Deserialize(old, SettingsJsonContext.Default.SettingsData);
+        data.ShouldNotBeNull().DuckOtherAudio.ShouldBeTrue();
+    }
+}
