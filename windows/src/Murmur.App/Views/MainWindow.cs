@@ -65,7 +65,7 @@ public sealed class MainWindow : ShellWindow
         _subtitle = Headline.Subtitle(string.Empty);
 
         _counter = Text.Hero("00:00");
-        _readoutLabel = MonoLabel.Make("Idle");
+        _readoutLabel = Text.Eyebrow("Idle");
         _bars = new LevelBars(Tokens.Layout.BarsCount, Tokens.Layout.BarsHeight) { HorizontalAlignment = HorizontalAlignment.Center };
 
         _recordLabel = new TextBlock { Text = "Start recording", VerticalAlignment = VerticalAlignment.Center };
@@ -138,7 +138,7 @@ public sealed class MainWindow : ShellWindow
     {
         _enabled = new Controls.Switch { IsChecked = _composition?.Settings.Data.IsEnabled ?? true, VerticalAlignment = VerticalAlignment.Center };
         _enabled.IsCheckedChanged += (_, _) => SetEnabled(_enabled.IsChecked == true);
-        var badgeRow = Panels.Row(Tokens.Space.Base, _badge, _enabled, MonoLabel.Make("On"));
+        var badgeRow = Panels.Row(Tokens.Space.Base, _badge, _enabled, Text.Eyebrow("On"));
         _enabledLabel = (TextBlock)badgeRow.Children[2];
 
         var copy = Panels.Column(Tokens.Space.Roomy,
@@ -151,7 +151,7 @@ public sealed class MainWindow : ShellWindow
         copy.VerticalAlignment = VerticalAlignment.Center;
 
         var readout = Card.Standard(Panels.Column(Tokens.Space.Roomy,
-            Panels.Split(_readoutLabel, MonoLabel.Make(AppPaths.ProductName)),
+            Panels.Split(_readoutLabel, Text.Eyebrow(AppPaths.ProductName)),
             _counter,
             _bars), Tokens.Space.Wide);
         readout.CornerRadius = new CornerRadius(Tokens.Radius.CardLarge);

@@ -290,6 +290,9 @@ public sealed class SgButton : Button
             : new Thickness(compact ? Tokens.Layout.ButtonPadXSmall : Tokens.Layout.ButtonPadX, 0);
         Background = Tokens.Brushes.None;
         BorderThickness = new Thickness(0);
+        // The pill's shadow lives on the inner Border; without this the Button clips it to
+        // its own rectangle, and a soft shadow turns into a hard-edged box.
+        ClipToBounds = false;
         HorizontalContentAlignment = HorizontalAlignment.Center;
         VerticalContentAlignment = VerticalAlignment.Center;
         RenderTransform = new TranslateTransform();

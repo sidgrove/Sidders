@@ -362,14 +362,15 @@ public sealed class SettingsWindow : ShellWindow
                 SelectKey(chord.VirtualKey, chord.Modifiers);
             });
             engine.Captured += onCaptured;
-            Closed += (_, _) => engine.Captured -= onCaptured;
+            Closed += (_, _) => { engine.Captured -= onCaptured; engine.CancelCapture(); };
         }
 
         box.KeyDown += (_, e) =>
         {
             if (_capturing && e.Key == Avalonia.Input.Key.Escape) { e.Handled = true; Finish(); }
         };
-        box.LostFocus += (_, _) => { if (_capturing) Finish(); };
+        // Not cancelled on focus loss: pressing Alt or Win moves focus in Windows, and that
+        // is exactly the moment a chord is being recorded. Escape, or closing the sheet, cancels.
         return box;
     }
 

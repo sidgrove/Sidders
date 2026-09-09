@@ -106,8 +106,8 @@ public sealed class TranscriptionsView : UserControl
         delete.Click += (_, _) => _store.Remove(record.Id);
 
         var meta = new WrapPanel { ItemSpacing = Tokens.Space.Base, LineSpacing = Tokens.Space.Tight };
-        meta.Children.Add(MonoLabel.Make(record.At.ToLocalTime().ToString("HH:mm · d MMM", CultureInfo.CurrentCulture)));
-        meta.Children.Add(MonoLabel.Make($"{record.AudioSeconds:0.0}s · {record.ProcessingSeconds * 1000:0} ms"));
+        meta.Children.Add(Text.Caption(record.At.ToLocalTime().ToString("HH:mm · d MMM", CultureInfo.CurrentCulture)));
+        meta.Children.Add(Text.Caption($"{record.AudioSeconds:0.0}s spoken · {record.ProcessingSeconds * 1000:0} ms"));
 
         if (record.CleanedBy is { Length: > 0 } model) meta.Children.Add(Pill.Brand($"AI · {model}"));
 

@@ -303,7 +303,7 @@ public sealed class PushToTalkHook : IHotkeySource
     private volatile bool _capturing;
 
     /// <inheritdoc />
-    public void BeginCapture() => _capturing = true;
+    public void BeginCapture() { _seenModifiers = 0; _capturing = true; }
 
     /// <inheritdoc />
     public void CancelCapture() => _capturing = false;
@@ -323,6 +323,17 @@ public sealed class PushToTalkHook : IHotkeySource
         return (int)flags;
     }
 
+    private int _seenModifiers;
+
+    private static int FlagOf(int vk) => vk switch
+    {
+        VK_LCONTROL or VK_RCONTROL or VK_CONTROL => (int)HotkeyModifiers.Control,
+        VK_LSHIFT or VK_RSHIFT or VK_SHIFT => (int)HotkeyModifiers.Shift,
+        VK_LMENU or VK_RMENU or VK_MENU => (int)HotkeyModifiers.Alt,
+        VK_LWIN or VK_RWIN => (int)HotkeyModifiers.Windows,
+        _ => 0,
+    };
+
     /// <summary>Handles one event while recording a shortcut. Returns true to swallow it.</summary>
     private bool Capture(int key, bool isDown)
     {
@@ -330,15 +341,26 @@ public sealed class PushToTalkHook : IHotkeySource
         {
             if (!isDown) return true;
             _capturing = false;
+            _seenModifiers = 0;
             Captured?.Invoke(this, (key, HeldModifiers()));
             return true;
         }
 
-        // A modifier released with nothing else held is the shortcut on its own.
-        if (!isDown && HeldModifiers() == 0)
+        // Modifiers alone can be the shortcut too — Ctrl+Alt+Shift, or just Right Ctrl. Every
+        // modifier pressed during the capture is remembered; when the last one is released
+        // the chord is the trigger key plus the others.
+        if (isDown)
+        {
+            _seenModifiers |= FlagOf(key);
+            return true;
+        }
+
+        if (HeldModifiers() == 0)
         {
             _capturing = false;
-            Captured?.Invoke(this, (key, 0));
+            var others = _seenModifiers & ~FlagOf(key);
+            _seenModifiers = 0;
+            Captured?.Invoke(this, (key, others));
         }
 
         return true;
