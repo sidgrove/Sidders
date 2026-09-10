@@ -94,6 +94,14 @@ public sealed class MainWindow : ShellWindow
 
         if (_composition?.Engine is { } engine)
         {
+            var audio = PlatformFactory.CreateFeedbackAudio();
+            var feedback = new FeedbackSounds(() => _composition.Settings.Data, wave => audio?.Play(wave));
+            engine.Changed += (_, _) =>
+            {
+                var state = engine.State == DictationState.Recording && !engine.IsCaptureReady
+                    ? DictationState.Idle : engine.State;
+                Dispatcher.UIThread.Post(() => { feedback.Observe(state); SyncFromEngine(); });
+            };
             engine.Faulted += (_, message) => Dispatcher.UIThread.Post(() => ShowFault(message));
             engine.Completed += (_, result) =>
             {
@@ -110,7 +118,7 @@ public sealed class MainWindow : ShellWindow
                         await clipboard.SetTextAsync(text).ConfigureAwait(true);
                 });
             };
-            engine.Sent += (_, _) => Dispatcher.UIThread.Post(() => _overlay?.ShowSendFeedback());
+            engine.Sent += (_, _) => Dispatcher.UIThread.Post(() => { feedback.Sent(); _overlay?.ShowSendFeedback(); });
             engine.Start();
             _ = PreloadAsync(engine);
         }
@@ -369,7 +377,7 @@ public sealed class MainWindow : ShellWindow
         if (_overlay is not null)
         {
             var cleaning = transcribing && _composition!.Settings.Data.AiCleanup;
-            if (busy && !IsActive) { _overlay.Present(); _overlay.Sync(recording, transcribing, cleaning, engine.Level, _counter.Text ?? string.Empty, preview); }
+            if (busy) { _overlay.Present(); _overlay.Sync(recording, transcribing, cleaning, engine.Level, _counter.Text ?? string.Empty, preview); }
             else if (_overlay.IsVisible && !_overlay.IsShowingSendFeedback) _overlay.Hide();
         }
     }

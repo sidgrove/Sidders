@@ -110,6 +110,9 @@ public sealed class DictationEngine : IAsyncDisposable
     /// <summary>Current state.</summary>
     public DictationState State { get; private set; } = DictationState.Idle;
 
+    /// <summary>True once the microphone has delivered audio for this recording.</summary>
+    public bool IsCaptureReady { get; private set; }
+
     /// <summary>Most recent input level, 0…1. Drives the meter.</summary>
     public float Level { get; private set; }
 
@@ -128,7 +131,7 @@ public sealed class DictationEngine : IAsyncDisposable
     /// <summary>Comma-separated alternative words recognised only at the end of dictation.</summary>
     public string SendWordAliases { get; set; } = string.Empty;
 
-    /// <summary>Phrase that presses Enter only when it is the entire dictation; blank disables it.</summary>
+    /// <summary>Terminal send phrase; spoken alone it sends existing text. Blank disables it.</summary>
     public string SendOnlyPhrase { get; set; } = "send it";
 
     /// <summary>Copies the final transcript before delivery, even when automatic typing is off.</summary>
@@ -429,6 +432,23 @@ public sealed class DictationEngine : IAsyncDisposable
                 // their buffer the moment this returns.
                 _buffer?.AddRange(chunk.Samples.Span);
                 Level = chunk.Rms();
+                if (!IsCaptureReady)
+                {
+                    lock (_audioLock)
+                    {
+                        if (State != DictationState.Recording) break;
+                        IsCaptureReady = true;
+                        Log.Info($"microphone delivering audio after {(_clock.Now - _startedAt).TotalMilliseconds:0} ms");
+                        // Capture is already running and queueing audio while Windows enumerates
+                        // and mutes sessions. Never put that work ahead of opening the microphone.
+                        if (_isEnabled && _duckAudio && Ducker is { } ducker)
+                        {
+                            _ducked = true;
+                            ducker.Duck();
+                            Log.Info("other audio ducked");
+                        }
+                    }
+                }
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -650,7 +670,7 @@ public sealed class DictationEngine : IAsyncDisposable
             return;
         }
         // Detect before corrections or AI can alter or invent the command.
-        var (content, send) = SpokenSendCommand.Extract(raw, SendWord, SendWordAliases);
+        var (content, send) = ExtractSendCommand(raw);
         if (send && string.IsNullOrWhiteSpace(content))
         {
             if (InjectText) await SendToFocusedAppAsync().ConfigureAwait(false);
@@ -700,7 +720,7 @@ public sealed class DictationEngine : IAsyncDisposable
         // Polish runs last so a correction or a clean-up that ends a sentence is treated
         // the same as one the engine produced itself.
         // A recognised command never belongs in the final text or clipboard.
-        if (send) candidate = SpokenSendCommand.Extract(candidate, SendWord, SendWordAliases).Text;
+        if (send) candidate = ExtractSendCommand(candidate).Text;
         var corrected = TranscriptPolish.Apply(candidate, FullStops);
 
         var result = new DictationResult(
@@ -748,6 +768,12 @@ public sealed class DictationEngine : IAsyncDisposable
     /// <summary>Whether <see cref="Faulted"/> fired within the last second, so a follow-up notice can defer to it.</summary>
     public bool IsFaultedRecently => _clock.Now - _lastFaultAt < TimeSpan.FromSeconds(1);
 
+    private (string Text, bool Send) ExtractSendCommand(string text)
+    {
+        var phrase = SpokenSendCommand.Extract(text, SendOnlyPhrase);
+        return phrase.Send ? phrase : SpokenSendCommand.Extract(text, SendWord, SendWordAliases);
+    }
+
     private void Fault(string message)
     {
         LastFault = message;
@@ -759,17 +785,10 @@ public sealed class DictationEngine : IAsyncDisposable
     {
         lock (_audioLock)
         {
-            var wasRecording = State == DictationState.Recording;
             State = state;
-            var isRecording = state == DictationState.Recording;
-            if (isRecording && !wasRecording && _isEnabled && _duckAudio && Ducker is { } ducker)
+            if (state != DictationState.Recording)
             {
-                _ducked = true;
-                ducker.Duck();
-                Log.Info("other audio ducked");
-            }
-            else if (!isRecording)
-            {
+                IsCaptureReady = false;
                 RestoreAudio();
             }
         }

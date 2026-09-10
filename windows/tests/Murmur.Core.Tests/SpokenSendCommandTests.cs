@@ -111,6 +111,11 @@ public sealed class SpokenSendCommandTests
 
     [Theory]
     [InlineData("Here is a sentence, blob", true, true, "Here is a sentence", 1)]
+    [InlineData("Okay, finish up, send it", true, true, "Okay, finish up", 1)]
+    [InlineData("Okay, finish up. Send it!", true, true, "Okay, finish up", 1)]
+    [InlineData("Okay, finish up, send it", true, false, "Okay, finish up", 0)]
+    [InlineData("Okay, finish up, send it", false, true, "Okay, finish up", 0)]
+    [InlineData("Please send it tomorrow", true, true, "Please send it tomorrow", 0)]
     [InlineData("Here is a sentence, blob", true, false, "Here is a sentence", 0)]
     [InlineData("Here is a sentence, blob", false, true, "Here is a sentence", 0)]
     [InlineData("Here is a sentence", true, true, "Here is a sentence", 0)]

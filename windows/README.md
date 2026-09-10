@@ -44,11 +44,17 @@ In **Settings → Writing**:
   Enter after text insertion. The default is `blob`; choose `send` if preferred.
 - **Also send if you hear**: comma-separated recognition alternatives, such as `sand`.
   These match only at the end of the complete dictation, not between sentences or paragraphs.
-- **Send existing text**: the default phrase `send it`, spoken on its own, presses Enter
-  without adding text or replacing the clipboard. Leave either command field blank to disable it.
+- **Send phrase**: the default phrase `send it` at the end of a dictation removes itself
+  and sends the preceding text. Spoken on its own, it presses Enter without adding text
+  or replacing the clipboard. Leave either command field blank to disable it.
 
 A brief multicoloured wave confirms that Enter was sent. This is a keypress confirmation;
 what Enter does depends on the focused application.
+
+The recording overlay appears even when the main window is active. **Settings → Sound
+effects** has separate switches for quiet recording start/stop notes and a send note.
+The start note waits for microphone audio to arrive. Capture starts before other apps
+are muted; the log records time to the first audio chunk for hardware diagnosis.
 
 Closing the main window with **×** leaves Acapella running in the tray. **Quit Acapella**
 stops it completely. Avoid running the older Sidders app alongside Acapella: both can
@@ -56,8 +62,8 @@ respond to the same dictation shortcut and insert overlapping text.
 
 On 2026-09-09, the user verified automatic insertion, send-word removal, the send animation,
 standalone `send it`, and dictation with the main window closed on Windows. The Windows
-solution currently has 201 passing tests; microphone privacy and unplugging a microphone
-remain separate hardware checks.
+solution currently has 208 passing tests. The latest capture-start change still needs
+a spoken hardware check; microphone privacy and unplugging a microphone remain separate checks.
 
 ---
 ## <a id="hardware"></a>What real hardware found

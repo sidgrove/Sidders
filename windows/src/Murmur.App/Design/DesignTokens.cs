@@ -661,7 +661,7 @@ public static class Tokens
         public const double BarGap = 3;
 
         /// <summary>Bar field height on the main card.</summary>
-        public const double BarsHeight = 48;
+        public const double BarsHeight = 80;
 
         /// <summary>Bar field height on the overlay.</summary>
         public const double BarsHeightSmall = 22;

@@ -9,6 +9,29 @@ namespace Murmur.CoreTests;
 /// <summary>Other audio goes down when a recording starts and comes back when it ends, however it ends.</summary>
 public sealed class AudioDuckingTests
 {
+    [Fact]
+    public async Task Microphone_is_capturing_before_other_apps_are_muted()
+    {
+        var capture = FakeAudioCapture.Tone(1);
+        var hotkey = new FakeHotkeySource();
+        var ducker = new CaptureOrderDucker(capture);
+        await using var engine = new DictationEngine(capture, hotkey,
+            new FakeTranscriber("hello"), new RecordingTextInjector(), () => [])
+        { Ducker = ducker };
+        hotkey.Press();
+        await Wait.UntilAsync(() => capture.Delivered);
+        ducker.WasCapturing.ShouldBeTrue();
+        hotkey.Release();
+        await Wait.UntilAsync(() => engine.State == DictationState.Idle);
+    }
+
+    private sealed class CaptureOrderDucker(FakeAudioCapture capture) : Murmur.Abstractions.IAudioDucker
+    {
+        public bool WasCapturing { get; private set; }
+        public void Duck() => WasCapturing = capture.IsCapturing;
+        public void Restore() { }
+    }
+
     private static async Task WaitForAsync(Func<bool> condition)
     {
         await Wait.UntilAsync(() => condition());

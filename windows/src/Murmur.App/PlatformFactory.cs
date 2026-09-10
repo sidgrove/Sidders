@@ -105,6 +105,10 @@ internal static class PlatformFactory
     public static IWindowTweaks? CreateWindowTweaks() =>
         Create<IWindowTweaks>("NativeWindow", []);
 
+    /// <summary>Creates optional sound feedback playback.</summary>
+    public static IFeedbackAudio? CreateFeedbackAudio() =>
+        Create<IFeedbackAudio>("FeedbackAudio", []);
+
     /// <summary>Creates the Run-key registration, or null off Windows.</summary>
     public static IStartupRegistration? CreateStartupRegistration() =>
         Create<IStartupRegistration>("StartupRegistration", []);
