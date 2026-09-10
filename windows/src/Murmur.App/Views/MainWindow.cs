@@ -63,7 +63,7 @@ public sealed class MainWindow : ShellWindow
 
         _counter = Text.Number("00:00", Tokens.Fonts.CaptionTitle, Tokens.Brushes.Muted);
         _readoutLabel = Text.Eyebrow("Idle");
-        _bars = new LevelBars(Tokens.Layout.BarsCountSmall, Tokens.Layout.BarsHeightSmall) { HorizontalAlignment = HorizontalAlignment.Center };
+        _bars = new LevelBars(Tokens.Layout.BarsCountSmall, Tokens.Layout.BarsHeight) { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         _preview = Text.Muted(string.Empty);
         _preview.TextWrapping = Avalonia.Media.TextWrapping.Wrap;
         _preview.MaxWidth = Tokens.Layout.OverlayPreviewWidth;
@@ -361,7 +361,7 @@ public sealed class MainWindow : ShellWindow
         var transcribing = engine.State == DictationState.Transcribing;
         var busy = recording || transcribing;
 
-        _bars.Level = engine.Level;
+        _bars.Level = Math.Clamp(engine.Level * Tokens.Layout.MainLevelGain, 0, 1);
         _bars.IsLive = recording;
 
         var state = recording ? "Listening" : transcribing ? "Working" : "Ready";

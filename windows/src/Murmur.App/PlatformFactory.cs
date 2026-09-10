@@ -105,6 +105,10 @@ internal static class PlatformFactory
     public static IWindowTweaks? CreateWindowTweaks() =>
         Create<IWindowTweaks>("NativeWindow", []);
 
+    /// <summary>Creates the native keyboard window menu.</summary>
+    public static IWindowMenu? CreateWindowMenu() =>
+        Create<IWindowMenu>("WindowMenu", []);
+
     /// <summary>Creates optional sound feedback playback.</summary>
     public static IFeedbackAudio? CreateFeedbackAudio() =>
         Create<IFeedbackAudio>("FeedbackAudio", []);

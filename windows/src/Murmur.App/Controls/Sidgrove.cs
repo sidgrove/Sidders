@@ -976,10 +976,14 @@ public sealed class NavLink : Button
         BorderThickness = new Thickness(0);
         Padding = new Thickness(0, Tokens.Space.Snug);
         Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
-        Template = new FuncControlTemplate<NavLink>((_, _) => new StackPanel
+        Template = new FuncControlTemplate<NavLink>((_, _) => new Border
         {
-            Spacing = Tokens.Space.Tight,
-            Children = { _label, _underline },
+            Padding = Padding,
+            Child = new StackPanel
+            {
+                Spacing = Tokens.Space.Tight,
+                Children = { _label, _underline },
+            },
         });
     }
 

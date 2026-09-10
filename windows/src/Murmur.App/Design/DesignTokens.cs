@@ -578,13 +578,13 @@ public static class Tokens
         public const double PanelInset = 20;
 
         /// <summary>Initial main window width.</summary>
-        public const double MainWidth = 880;
+        public const double MainWidth = 1080;
 
         /// <summary>Maximum main content width, keeping transcript lines readable on large screens.</summary>
         public const double MainContentMaxWidth = 960;
 
         /// <summary>Initial main window height.</summary>
-        public const double MainHeight = 660;
+        public const double MainHeight = 780;
 
         /// <summary>Smallest main window.</summary>
         public const double MainMinWidth = 640;
@@ -662,6 +662,9 @@ public static class Tokens
 
         /// <summary>Bar field height on the main card.</summary>
         public const double BarsHeight = 80;
+
+        /// <summary>Display gain for the main-window microphone animation.</summary>
+        public const double MainLevelGain = 4;
 
         /// <summary>Bar field height on the overlay.</summary>
         public const double BarsHeightSmall = 22;

@@ -32,11 +32,22 @@ public abstract class ShellWindow : Window
         TransparencyLevelHint = [WindowTransparencyLevel.None];
         FontFamily = Tokens.Fonts.Sans;
 
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Space || e.KeyModifiers != KeyModifiers.Alt) return;
+            e.Handled = true;
+            ShowSystemMenu();
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape && IsSheet) { Close(); e.Handled = true; }
         };
     }
+
+    /// <summary>Shows the standard keyboard window menu without changing custom chrome.</summary>
+    protected virtual void ShowSystemMenu() =>
+        PlatformFactory.CreateWindowMenu()?.Show(TryGetPlatformHandle()?.Handle ?? 0);
 
     /// <summary>
     /// Wraps <paramref name="body"/> beneath the caption strip. The strip sits on plain
