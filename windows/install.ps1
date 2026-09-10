@@ -23,8 +23,14 @@ $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$name
 $uninstKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$name"
 $exe       = Join-Path $target 'Acapella.exe'
 
-Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Milliseconds 500
+$dist = Join-Path $PSScriptRoot 'dist'
+if (-not $Uninstall -and -not (Test-Path (Join-Path $dist 'Acapella.exe'))) {
+    throw 'Extract the complete download first. Install.cmd, install.ps1 and dist must be in the same folder.'
+}
+Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
+    Stop-Process -Id $_.Id -Force
+    if (-not $_.WaitForExit(5000)) { throw 'Acapella did not exit. Quit it and retry installation.' }
+}
 
 if ($Uninstall) {
     Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue
@@ -56,7 +62,7 @@ New-Item -Path $uninstKey -Force | Out-Null
 Set-ItemProperty $uninstKey DisplayName $name
 Set-ItemProperty $uninstKey DisplayIcon "$exe,0"
 Set-ItemProperty $uninstKey DisplayVersion '1.0.0'
-Set-ItemProperty $uninstKey Publisher 'Pivot Studio'
+Set-ItemProperty $uninstKey Publisher 'Sidgrove'
 Set-ItemProperty $uninstKey InstallLocation $target
 Set-ItemProperty $uninstKey EstimatedSize ([int]$size) -Type DWord
 Set-ItemProperty $uninstKey NoModify 1 -Type DWord

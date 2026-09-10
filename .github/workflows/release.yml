@@ -1,0 +1,52 @@
+name: Windows preview release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: windows/global.json
+      - name: Build and test
+        shell: pwsh
+        run: |
+          dotnet build windows/Murmur.sln -c Release --no-incremental -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          dotnet test windows/Murmur.sln -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+      - name: Publish and verify
+        shell: pwsh
+        run: |
+          dotnet publish windows/src/Murmur.App/Murmur.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o windows/artifacts/publish
+          if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
+          $check = Start-Process windows/artifacts/publish/Acapella.exe -ArgumentList '--selftest' -WindowStyle Hidden -Wait -PassThru
+          if ($check.ExitCode -ne 0) { throw 'Published self-test failed' }
+          ./windows/package.ps1 -PublishDirectory windows/artifacts/publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Acapella-Windows-download
+          path: |
+            windows/artifacts/release/Acapella-Windows-x64.zip
+            windows/artifacts/release/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Publish preview release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$env:RELEASE_TAG" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create "$env:RELEASE_TAG" --verify-tag --prerelease --title "Acapella $env:RELEASE_TAG — Windows preview" --notes-file docs/RELEASE-NOTES.md
+            if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+          }
+          gh release upload "$env:RELEASE_TAG" windows/artifacts/release/Acapella-Windows-x64.zip windows/artifacts/release/SHA256SUMS.txt --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }

@@ -549,6 +549,7 @@ public sealed class DictationEngine : IAsyncDisposable
 
     private async Task EndAsync()
     {
+        var deliveryClock = System.Diagnostics.Stopwatch.StartNew();
         List<float>? samples;
 
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -570,6 +571,7 @@ public sealed class DictationEngine : IAsyncDisposable
         try
         {
             if (_preview is { } preview) await preview.ConfigureAwait(false);
+            Log.Info($"stop-to-final processing: {deliveryClock.ElapsedMilliseconds} ms (capture stop and preview wait)");
             await ProcessAsync(samples).ConfigureAwait(false);
         }
         catch (Exception e)
@@ -579,6 +581,7 @@ public sealed class DictationEngine : IAsyncDisposable
         }
         finally
         {
+            Log.Info($"stop-to-complete: {deliveryClock.ElapsedMilliseconds} ms");
             _recording?.Dispose();
             _recording = null;
             _preview = null;
@@ -696,7 +699,9 @@ public sealed class DictationEngine : IAsyncDisposable
         var candidate = local;
         if (AiCleanup && Cleaner is { } cleaner && CleanupGuard.IsWorthCleaning(local))
         {
+            var cleanupClock = System.Diagnostics.Stopwatch.StartNew();
             var cleaned = await cleaner.CleanAsync(local, CancellationToken.None).ConfigureAwait(false);
+            Log.Info($"AI clean-up: {cleanupClock.ElapsedMilliseconds} ms");
             if (cleaned is not null && !CleanupGuard.IsPlausible(local, cleaned))
             {
                 // The model summarised or padded. Wispr-grade means never doing that to
@@ -743,7 +748,9 @@ public sealed class DictationEngine : IAsyncDisposable
 
         if (!InjectText) return;
 
+        var insertionClock = System.Diagnostics.Stopwatch.StartNew();
         var delivered = await _injector.InjectAsync(corrected, CancellationToken.None).ConfigureAwait(false);
+        Log.Info($"text insertion: {insertionClock.ElapsedMilliseconds} ms; accepted={delivered}");
         if (!delivered)
         {
             Log.Warn("text could not be delivered to the focused app");

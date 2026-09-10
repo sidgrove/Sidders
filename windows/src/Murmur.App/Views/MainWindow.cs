@@ -160,7 +160,18 @@ public sealed class MainWindow : ShellWindow
         settings.Click += (_, _) => ShowSettings();
         var navigation = Panels.Row(Tokens.Space.Section, _transcriptionsLink, _dictionaryLink, settings);
         navigation.Margin = new Thickness(0, Tokens.Space.Snug, 0, 0);
-        return navigation;
+        var mode = new SgButton(_composition?.Settings.Data.AiCleanup == true ? "Polished · switch to Instant" : "Instant · switch to Polished", SgButton.Kind.Quiet, compact: true);
+        ToolTip.SetTip(mode, "Instant uses local transcription. Polished waits for optional Gemini clean-up. Change modes between recordings.");
+        mode.IsEnabled = _composition is not null;
+        mode.Click += (_, _) =>
+        {
+            if (_composition is null || _composition.Engine?.State != DictationState.Idle) return;
+            _composition.Settings.Update(_composition.Settings.Data with { AiCleanup = !_composition.Settings.Data.AiCleanup });
+        };
+        if (_composition is not null)
+            _composition.Settings.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
+                mode.Content = _composition.Settings.Data.AiCleanup ? "Polished · switch to Instant" : "Instant · switch to Polished");
+        return Panels.Column(Tokens.Space.Snug, navigation, mode);
     }
 
     private Border BuildBody()

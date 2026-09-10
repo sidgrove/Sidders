@@ -12,7 +12,18 @@ Press a key, say it, and it's typed. Acapella is a dictation app for Windows fro
 
 ## Install
 
-Grab the latest `Acapella.exe` from the releases page, or build it yourself:
+**Windows:** open [Releases](https://github.com/sidgrove/acapella/releases), download
+**Acapella-Windows-x64.zip**, choose **Extract All**, then double-click **Install.cmd**.
+Preview builds are labelled **Pre-release**. Keep all the extracted files together;
+the executable needs its companion DLLs. Do not download GitHub's source-code ZIP to install.
+
+**[Step-by-step Windows installation and troubleshooting →](docs/INSTALL-WINDOWS.md)**
+
+**Mac:** this repo also contains a native Swift app requiring macOS 26. It is currently
+a developer build, with older branding and different features—not a packaged Acapella
+Mac release. **[Mac requirements, build instructions and remaining work →](docs/MAC.md)**
+
+Developers can build Windows from source:
 
 ```powershell
 cd windows
@@ -43,3 +54,11 @@ Settings, dictionary, history, log and the speech model live under `%LOCALAPPDAT
 ## Licence
 
 Proprietary. © Sidgrove.
+
+## Release maintainers
+
+The Windows preview-release workflow builds, tests, self-tests and packages the complete
+app when a `v*` tag is pushed. It attaches the installable ZIP and SHA-256 checksum to a
+GitHub pre-release. A manual workflow run produces an Actions artifact without publishing
+a release. Before announcing a download, confirm the workflow succeeded and the assets
+appear on the Releases page. No credentials, API keys, model weights or user history are bundled.
