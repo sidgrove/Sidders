@@ -157,7 +157,14 @@ public sealed class OverlayWindow : Window
                 (int)(work.Bottom - (Height + Tokens.Layout.OverlayBottomMargin - Tokens.Layout.OverlayShadowRoom) * scale));
         }
 
-        if (!IsVisible) Show();
+        if (!IsVisible)
+        {
+            Show();
+            Log.Info($"overlay shown on {screen?.DisplayName ?? "no screen"} at {Position.X},{Position.Y}");
+        }
+
+        // The style bit alone is not enough: see IWindowTweaks.KeepOnTop.
+        _tweaks?.KeepOnTop(TryGetPlatformHandle()?.Handle ?? 0);
     }
 
     /// <summary>Pushes the current state onto the pill.</summary>

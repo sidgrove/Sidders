@@ -29,6 +29,15 @@ public sealed class NativeWindow : IWindowTweaks
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     private static extern IntPtr SetWindowLongPtr(IntPtr window, int index, IntPtr value);
 
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOACTIVATE = 0x0010;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
@@ -48,6 +57,14 @@ public sealed class NativeWindow : IWindowTweaks
         var style = GetWindowLongPtr(handle, GWL_EXSTYLE).ToInt64();
         style |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
         SetWindowLongPtr(handle, GWL_EXSTYLE, new IntPtr(style));
+    }
+
+    /// <inheritdoc />
+    public void KeepOnTop(nint handle)
+    {
+        if (handle == 0) return;
+
+        SetWindowPos(handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
     }
 
     /// <inheritdoc />

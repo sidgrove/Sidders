@@ -27,6 +27,29 @@ public sealed class OverlayLayoutTests
         finally { overlay.Close(); }
     }
     [AvaloniaFact]
+    public void Presenting_reasserts_always_on_top_every_time()
+    {
+        var tweaks = new RecordingTweaks();
+        var overlay = new OverlayWindow(tweaks);
+        try
+        {
+            overlay.Present();
+            tweaks.KeepOnTopCalls.ShouldBe(1, "a shown pill must be pushed back into the topmost band");
+            overlay.Present();
+            tweaks.KeepOnTopCalls.ShouldBe(2, "a pill that stays shown can still be demoted, so every sync re-asserts");
+        }
+        finally { overlay.Close(); }
+    }
+
+    private sealed class RecordingTweaks : Murmur.Abstractions.IWindowTweaks
+    {
+        public int KeepOnTopCalls { get; private set; }
+        public void MakeNonActivating(nint handle) { }
+        public void KeepOnTop(nint handle) => KeepOnTopCalls++;
+        public (int X, int Y)? ActiveWindowCentre() => null;
+    }
+
+    [AvaloniaFact]
     public void Empty_preview_is_small_and_only_words_expand_it()
     {
         var overlay = new OverlayWindow(null);

@@ -211,6 +211,19 @@ public interface IWindowTweaks
     void MakeNonActivating(nint handle);
 
     /// <summary>
+    /// Puts a window back into the always-on-top band of the z-order.
+    /// </summary>
+    /// <remarks>
+    /// <c>WS_EX_TOPMOST</c> is a style bit, not a guarantee. On 2026-09-11 the pill still
+    /// carried the bit yet sat under 140-odd ordinary windows, along with every other app's
+    /// topmost overlay, after the process had run for fourteen hours. The framework only
+    /// applies the band when <c>Topmost</c> changes, so the pill must re-assert it itself each
+    /// time it is presented.
+    /// </remarks>
+    /// <param name="handle">The platform window handle.</param>
+    void KeepOnTop(nint handle);
+
+    /// <summary>
     /// The centre of the window the user is working in, in screen pixels, or null.
     /// </summary>
     /// <remarks>
