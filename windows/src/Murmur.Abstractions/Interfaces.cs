@@ -54,6 +54,12 @@ public interface IAudioCapture : IAsyncDisposable
 
     /// <summary>Starts capture and yields chunks until cancelled.</summary>
     IAsyncEnumerable<AudioChunk> CaptureAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// How much of the most recent capture was recorded before it was asked for — audio
+    /// from before the key press that a warm implementation keeps. Zero for a plain device.
+    /// </summary>
+    TimeSpan PreRollDelivered => TimeSpan.Zero;
 }
 
 /// <summary>One microphone the OS knows about.</summary>
@@ -270,6 +276,13 @@ public interface ITranscriptCleaner
 
     /// <summary>Cleans <paramref name="text"/>, or returns null if it could not.</summary>
     Task<string?> CleanAsync(string text, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Opens whatever connection <see cref="CleanAsync"/> will need, so the round trip after
+    /// the key is released does not also pay for a TCP and TLS handshake.
+    /// </summary>
+    /// <remarks>Called when recording starts. Must never throw; failures are for the log.</remarks>
+    Task WarmUpAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 /// <summary>

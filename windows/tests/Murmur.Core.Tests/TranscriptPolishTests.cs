@@ -38,8 +38,8 @@ public sealed class CleanupGuardTests
     [Fact]
     public void Short_utterances_are_not_worth_a_round_trip()
     {
-        CleanupGuard.IsWorthCleaning("one two").ShouldBeFalse();
-        CleanupGuard.IsWorthCleaning("one two three").ShouldBeTrue();
+        CleanupGuard.IsWorthCleaning("one two three four").ShouldBeFalse();
+        CleanupGuard.IsWorthCleaning("one two three four five").ShouldBeTrue();
     }
 
     [Theory]

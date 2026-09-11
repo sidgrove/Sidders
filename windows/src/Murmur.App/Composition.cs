@@ -80,7 +80,11 @@ public sealed class Composition : IAsyncDisposable
         var dictionary = new DictionaryFile(DictionaryFile.DefaultPath);
         var transcripts = new TranscriptStore(TranscriptStore.DefaultPath);
 
-        var capture = PlatformFactory.CreateAudioCapture(() => settings.Data.MicrophoneDeviceId);
+        // Warm: the microphone stays open between dictations so the first word is never lost
+        // to device start-up, and the moments before the key press are included.
+        IAudioCapture? capture = PlatformFactory.CreateAudioCapture(() => settings.Data.MicrophoneDeviceId) is { } device
+            ? new WarmAudioCapture(device)
+            : null;
         var hotkey = PlatformFactory.CreateHotkeySource(settings.Data.PushToTalkKey);
         var injector = PlatformFactory.CreateTextInjector();
         var startup = PlatformFactory.CreateStartupRegistration();

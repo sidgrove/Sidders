@@ -45,8 +45,16 @@ public sealed class SendInputTextInjector : ITextInjector
     /// </summary>
     private static readonly TimeSpan ClipboardSettle = TimeSpan.FromMilliseconds(60);
 
-    /// <summary>Time for the target to finish processing the paste before delivery completes.</summary>
-    private static readonly TimeSpan PasteSettle = TimeSpan.FromMilliseconds(500);
+    /// <summary>
+    /// Time for the target to finish processing a paste before Enter is pressed after it.
+    /// </summary>
+    /// <remarks>
+    /// This used to be a 500 ms wait after <i>every</i> paste, left over from when the old
+    /// clipboard contents were restored afterwards. The restore went in abfbb8f; the wait
+    /// stayed, and cost half a second on every dictation over 40 characters. Only a spoken
+    /// send needs the paste to have landed, so only <see cref="SendAsync"/> waits now.
+    /// </remarks>
+    private static readonly TimeSpan SendSettle = TimeSpan.FromMilliseconds(150);
 
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
@@ -154,11 +162,9 @@ public sealed class SendInputTextInjector : ITextInjector
         if (!Win32Clipboard.SetText(text)) return TypeWithNewlines(text);
 
         await Task.Delay(ClipboardSettle, cancellationToken).ConfigureAwait(false);
-        var pasted = PressCtrlV();
-        await Task.Delay(PasteSettle, cancellationToken).ConfigureAwait(false);
 
-        // Do not restore an older clipboard value after delivery.
-        return pasted;
+        // The clipboard keeps the transcript afterwards; nothing is restored, so nothing waits.
+        return PressCtrlV();
     }
 
     /// <summary>Types arbitrary text as Unicode packets.</summary>
@@ -251,8 +257,8 @@ public sealed class SendInputTextInjector : ITextInjector
     /// <inheritdoc />
     public async ValueTask<bool> SendAsync(CancellationToken cancellationToken)
     {
-        // Let typed characters reach the target before its submit key.
-        await Task.Delay(ClipboardSettle, cancellationToken).ConfigureAwait(false);
+        // Let typed or pasted characters reach the target before its submit key.
+        await Task.Delay(SendSettle, cancellationToken).ConfigureAwait(false);
         var held = new List<int>();
         foreach (var key in new[] { VK_CONTROL, VK_SHIFT, VK_MENU, VK_LWIN, VK_RWIN })
             if ((GetAsyncKeyState(key) & 0x8000) != 0) held.Add(key);
@@ -267,8 +273,8 @@ public sealed class SendInputTextInjector : ITextInjector
     /// <summary>How long to wait after setting the clipboard before pasting.</summary>
     public static TimeSpan ClipboardSettleDelay => ClipboardSettle;
 
-    /// <summary>How long to wait after pasting before restoring the clipboard.</summary>
-    public static TimeSpan PasteSettleDelay => PasteSettle;
+    /// <summary>How long to wait after delivering text before pressing Enter for it.</summary>
+    public static TimeSpan SendSettleDelay => SendSettle;
 
     private static INPUT UnicodeInput(ushort codeUnit, bool up) => new()
     {

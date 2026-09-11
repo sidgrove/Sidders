@@ -408,6 +408,7 @@ public sealed class DictationEngine : IAsyncDisposable
 
             _buffer = [];
             _startedAt = _clock.Now;
+            _heard = false;
             _recording = new CancellationTokenSource();
             SetPreview(string.Empty);
             SetState(DictationState.Recording);
@@ -417,6 +418,9 @@ public sealed class DictationEngine : IAsyncDisposable
         {
             _gate.Release();
         }
+
+        // The user is about to talk for a while; use that time to open the clean-up connection.
+        if (AiCleanup && Cleaner is { } warm) _ = WarmUpCleanerAsync(warm);
 
         try
         {
@@ -432,6 +436,13 @@ public sealed class DictationEngine : IAsyncDisposable
                 // their buffer the moment this returns.
                 _buffer?.AddRange(chunk.Samples.Span);
                 Level = chunk.Rms();
+                if (!_heard && Level >= SilenceFloor)
+                {
+                    // How long after the key press the device produced sound rather than
+                    // zeros. With the warm capture this should read zero or close to it.
+                    _heard = true;
+                    Log.Info($"first audible audio after {(_clock.Now - _startedAt).TotalMilliseconds:0} ms");
+                }
                 if (!IsCaptureReady)
                 {
                     lock (_audioLock)
@@ -471,6 +482,14 @@ public sealed class DictationEngine : IAsyncDisposable
             Level = 0;
             Changed?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private bool _heard;
+
+    private static async Task WarmUpCleanerAsync(ITranscriptCleaner cleaner)
+    {
+        try { await cleaner.WarmUpAsync(CancellationToken.None).ConfigureAwait(false); }
+        catch (Exception e) { Log.Warn($"clean-up warm-up failed: {e.Message}"); }
     }
 
     private async Task AbandonRecordingAsync()
@@ -594,9 +613,16 @@ public sealed class DictationEngine : IAsyncDisposable
     /// Recordings shorter than this are dropped without transcribing.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Observed on real hardware: a brief tap of the key — often a Shift pressed for a
     /// capital letter — yields 30 to 400 ms of room tone, and Parakeet hallucinates
     /// "Mm-hmm." onto it, which then gets typed. No word fits in less than this.
+    /// </para>
+    /// <para>
+    /// Judged after subtracting <see cref="IAudioCapture.PreRollDelivered"/>: the warm
+    /// capture prepends audio from before the key press, so even a tap arrives with more
+    /// than this much audio.
+    /// </para>
     /// </remarks>
     public static readonly TimeSpan MinimumUtterance = TimeSpan.FromMilliseconds(500);
 
@@ -611,9 +637,10 @@ public sealed class DictationEngine : IAsyncDisposable
         if (samples is null || samples.Count == 0) return;
 
         var seconds = (double)samples.Count / AudioChunk.SampleRate;
-        if (seconds < MinimumUtterance.TotalSeconds)
+        var utterance = seconds - _capture.PreRollDelivered.TotalSeconds;
+        if (utterance < MinimumUtterance.TotalSeconds)
         {
-            Log.Info($"ignored a {seconds * 1000:0} ms tap of the key");
+            Log.Info($"ignored a {utterance * 1000:0} ms tap of the key");
             return;
         }
 

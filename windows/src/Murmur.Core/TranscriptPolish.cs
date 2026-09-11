@@ -66,8 +66,11 @@ public static class TranscriptPolish
 /// </summary>
 public static class CleanupGuard
 {
-    /// <summary>Utterances with fewer words than this are not worth a round trip.</summary>
-    public const int MinimumWords = 3;
+    /// <summary>
+    /// Utterances with fewer words than this are not worth a round trip. The rules layer
+    /// already capitalises and punctuates them, and the trip costs 500-900 ms.
+    /// </summary>
+    public const int MinimumWords = 5;
 
     /// <summary>A result with fewer than this share of the input's words was summarised.</summary>
     public const double MinimumRatio = 0.55;

@@ -122,17 +122,17 @@ public sealed class EngineCleanupAndToggleTests
         DictationResult? completed = null;
 
         var capture = FakeAudioCapture.Tone(0.6);
-        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("um so hello there."), injector, () => [])
+        await using var engine = new DictationEngine(capture, hotkey, new FakeTranscriber("um so hello there, how are you."), injector, () => [])
         {
             AiCleanup = true,
-            Cleaner = new StubCleaner("Hello there"),
+            Cleaner = new StubCleaner("Hello there, how are you"),
         };
         engine.Completed += (_, r) => completed = r;
 
         hotkey.Press();
         await DrainAndReleaseAsync(hotkey, engine, capture);
 
-        injector.Injected.ShouldBe(["Hello there"]);
+        injector.Injected.ShouldBe(["Hello there, how are you"]);
         completed.ShouldNotBeNull().CleanedBy.ShouldBe("stub");
     }
 
