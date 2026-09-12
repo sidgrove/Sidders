@@ -36,8 +36,28 @@ public sealed class TranscriptionsView : UserControl
         _list = new StackPanel { Spacing = Tokens.Space.Base, Margin = new Thickness(Tokens.Layout.ScrollGutter * 2, 0, Tokens.Layout.ScrollGutter * 2, Tokens.Space.Roomy) };
         _count = Text.Caption(string.Empty);
 
+        // Two clicks to wipe the history, and the button says so. One click used to
+        // rewrite the file on the spot with no way back.
         var clear = new SgButton("Clear all", SgButton.Kind.Quiet, compact: true);
-        clear.Click += (_, _) => { _store.Clear(); Refresh(); };
+        var armed = false;
+        var disarm = new Avalonia.Threading.DispatcherTimer { Interval = Tokens.Motion.ConfirmWindow };
+        disarm.Tick += (_, _) => { disarm.Stop(); armed = false; clear.Content = "Clear all"; };
+        clear.Click += (_, _) =>
+        {
+            if (!armed)
+            {
+                armed = true;
+                clear.Content = "Click again to clear everything";
+                disarm.Stop();
+                disarm.Start();
+                return;
+            }
+            disarm.Stop();
+            armed = false;
+            clear.Content = "Clear all";
+            _store.Clear();
+            Refresh();
+        };
 
         Content = new DockPanel
         {

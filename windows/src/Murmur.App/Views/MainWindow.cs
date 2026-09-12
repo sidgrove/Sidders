@@ -119,6 +119,7 @@ public sealed class MainWindow : ShellWindow
                 });
             };
             engine.Sent += (_, _) => Dispatcher.UIThread.Post(() => { feedback.Sent(); _overlay?.ShowSendFeedback(); });
+            engine.Dropped += (_, reason) => Dispatcher.UIThread.Post(() => _overlay?.ShowNotice(reason));
             engine.Start();
             _ = PreloadAsync(engine);
         }
@@ -144,6 +145,20 @@ public sealed class MainWindow : ShellWindow
         var ready = await engine.PreloadAsync(CancellationToken.None).ConfigureAwait(true);
         if (!ready) ShowFault(DictationEngine.ModelMissingMessage);
         RefreshHint();
+        // The Settings status was computed before the model finished loading and would
+        // otherwise say "found, loading" for the rest of the session.
+        _settingsView?.RefreshModel();
+    }
+
+    /// <summary>
+    /// Types the most recent transcript again, wherever the caret is now. Also reachable
+    /// from the tray, for text that landed in the wrong window.
+    /// </summary>
+    public void RetypeLast()
+    {
+        var records = _composition?.Transcripts.Records;
+        if (_composition?.Engine is not { } engine || records is not { Count: > 0 }) return;
+        _ = engine.RetypeAsync(records[0].Text);
     }
 
     /// <summary>Re-checks the model after a download from Settings.</summary>
@@ -241,8 +256,8 @@ public sealed class MainWindow : ShellWindow
         Bind(Key.D1, KeyModifiers.Control, () => ShowSection(true));
         Bind(Key.D2, KeyModifiers.Control, () => ShowSection(false));
         Bind(Key.C, KeyModifiers.Control | KeyModifiers.Shift, CopyLast);
-        Bind(Key.W, KeyModifiers.Control, Hide);
-        Bind(Key.Q, KeyModifiers.Control, App.Quit);
+        Bind(Key.W, KeyModifiers.Control, () => { _settingsView?.Flush(); Hide(); });
+        Bind(Key.Q, KeyModifiers.Control, () => { _settingsView?.Flush(); App.Quit(); });
         Bind(Key.F1, KeyModifiers.None, ShowAbout);
         Bind(Key.L, KeyModifiers.Control | KeyModifiers.Shift, () => OpenPath(Log.Path));
     }
@@ -335,6 +350,13 @@ public sealed class MainWindow : ShellWindow
     {
         if (_composition is null) { _subtitle.Text = "Use your shortcut to start dictating."; return; }
 
+        if (!_composition.Settings.Data.IsEnabled)
+        {
+            _subtitle.Text = "Paused. Flip the switch to listen for the key again.";
+            ToolTip.SetTip(_subtitle, null);
+            return;
+        }
+
         var mode = _composition.Settings.Data.Mode switch
         {
             ActivationMode.Tap => $"{KeyName} · Tap to start / stop",
@@ -389,7 +411,7 @@ public sealed class MainWindow : ShellWindow
         {
             var cleaning = transcribing && _composition!.Settings.Data.AiCleanup;
             if (busy) { _overlay.Present(); _overlay.Sync(recording, transcribing, cleaning, engine.Level, _counter.Text ?? string.Empty, preview); }
-            else if (_overlay.IsVisible && !_overlay.IsShowingSendFeedback) _overlay.Hide();
+            else if (_overlay.IsVisible && !_overlay.IsShowingTransient) _overlay.Hide();
         }
     }
 
@@ -408,11 +430,13 @@ public sealed class MainWindow : ShellWindow
     private void SetState(bool recording, bool transcribing)
     {
         _bars.IsVisible = recording;
-        _badge.IsVisible = recording || transcribing;
         var off = _composition is not null && !_composition.Settings.Data.IsEnabled;
+        // The badge shows while busy, and while paused: an app that has been switched off
+        // and looks exactly like one that is ready is a support question waiting to happen.
+        _badge.IsVisible = recording || transcribing || off;
         if (off && !recording && !transcribing)
         {
-            _badge.Set("Off", Tokens.Brushes.Faint, live: false);
+            _badge.Set("Paused", Tokens.Brushes.Faint, live: false);
             _readoutLabel.Text = "OFF";
             return;
         }
@@ -474,6 +498,9 @@ public sealed class MainWindow : ShellWindow
     /// <inheritdoc />
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        // An edit still waiting on its debounce must not be lost to the window going.
+        _settingsView?.Flush();
+
         // Closing leaves the app in the tray; the hotkey still works. Quit is explicit.
         if (!App.IsQuitting && _composition is not null)
         {

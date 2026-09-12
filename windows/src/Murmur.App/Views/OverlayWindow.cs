@@ -43,9 +43,16 @@ public sealed class OverlayWindow : Window
     private readonly SendPulse _sendPulse;
     private readonly DispatcherTimer _sendTimer = new() { Interval = Tokens.Motion.Frame };
     private readonly Stopwatch _sendClock = new();
+    private readonly DispatcherTimer _noticeTimer = new() { Interval = Tokens.Motion.DroppedNotice };
 
     /// <summary>Whether the short auto-send confirmation is being displayed.</summary>
     public bool IsShowingSendFeedback => _sendTimer.IsEnabled;
+
+    /// <summary>Whether a brief "nothing was typed" notice is being displayed.</summary>
+    public bool IsShowingNotice => _noticeTimer.IsEnabled;
+
+    /// <summary>Whether the pill is busy with something the state sync must not cut short.</summary>
+    public bool IsShowingTransient => IsShowingSendFeedback || IsShowingNotice;
 
     /// <summary>Builds the overlay. Not shown until <see cref="Present"/>.</summary>
     public OverlayWindow(IWindowTweaks? tweaks)
@@ -119,7 +126,12 @@ public sealed class OverlayWindow : Window
                 Hide();
             }
         };
-        Closed += (_, _) => _sendTimer.Stop();
+        _noticeTimer.Tick += (_, _) =>
+        {
+            _noticeTimer.Stop();
+            Hide();
+        };
+        Closed += (_, _) => { _sendTimer.Stop(); _noticeTimer.Stop(); };
 
         _panel = new Border
         {
@@ -176,9 +188,10 @@ public sealed class OverlayWindow : Window
     /// <param name="preview">The running transcript, or empty.</param>
     public void Sync(bool recording, bool transcribing, bool cleaning, double level, string counter, string preview)
     {
-        if (IsShowingSendFeedback && !recording) return;
+        if (IsShowingTransient && !recording) return;
         _sendTimer.Stop();
         _sendClock.Stop();
+        _noticeTimer.Stop();
         _sendPulse.IsVisible = false;
         _bars.IsVisible = true;
         _dot.IsVisible = true;
@@ -210,9 +223,37 @@ public sealed class OverlayWindow : Window
         }
     }
 
+    /// <summary>
+    /// Says briefly why nothing was typed — "Nothing heard" — then goes away.
+    /// </summary>
+    /// <remarks>
+    /// A pill that simply vanishes after a recording reads as the app having failed. A
+    /// second of explanation is the difference between "it dropped my words" and "I
+    /// didn't say anything it could use".
+    /// </remarks>
+    public void ShowNotice(string text)
+    {
+        _sendTimer.Stop();
+        _sendClock.Stop();
+        _sendPulse.IsVisible = false;
+        _state.Text = text;
+        _counter.Text = string.Empty;
+        _dot.IsVisible = true;
+        _dot.Fill = Tokens.Brushes.Muted;
+        _bars.IsLive = false;
+        _bars.IsVisible = false;
+        _previewScroll.IsVisible = false;
+        _panel.Height = Tokens.Layout.OverlayHeight;
+        Height = Tokens.Layout.OverlayHeight + Tokens.Layout.OverlayShadowRoom * 2;
+        _noticeTimer.Stop();
+        _noticeTimer.Start();
+        Present();
+    }
+
     /// <summary>Shows a brief colour wave after Enter has been delivered, without taking focus.</summary>
     public void ShowSendFeedback()
     {
+        _noticeTimer.Stop();
         _state.Text = "Sent ↗";
         _counter.Text = string.Empty;
         _dot.IsVisible = false;

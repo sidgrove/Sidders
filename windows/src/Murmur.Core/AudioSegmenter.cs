@@ -84,8 +84,11 @@ public static class AudioSegmenter
     }
 
     /// <summary>
-    /// Finds the lowest-energy window in <c>[from, to)</c> and returns its midpoint.
+    /// Finds the lowest-energy window in <c>[from, to)</c> and returns its midpoint, so a
+    /// cut lands in a pause rather than mid-word. Shared with the live preview.
     /// </summary>
+    public static int QuietestPoint(ReadOnlySpan<float> samples, int from, int to) => FindQuietestPoint(samples, from, to);
+
     private static int FindQuietestPoint(ReadOnlySpan<float> samples, int from, int to)
     {
         from = Math.Max(from, 0);

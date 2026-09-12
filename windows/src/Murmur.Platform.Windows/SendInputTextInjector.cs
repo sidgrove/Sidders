@@ -62,12 +62,30 @@ public sealed class SendInputTextInjector : ITextInjector
     private const uint KEYEVENTF_UNICODE = 0x0004;
 
     private const int VK_CONTROL = 0x11;
-    private const int VK_SHIFT = 0x10;
-    private const int VK_MENU = 0x12;
+    private const int VK_LSHIFT = 0xA0;
+    private const int VK_RSHIFT = 0xA1;
+    private const int VK_LCONTROL = 0xA2;
+    private const int VK_RCONTROL = 0xA3;
+    private const int VK_LMENU = 0xA4;
+    private const int VK_RMENU = 0xA5;
     private const int VK_LWIN = 0x5B;
     private const int VK_RWIN = 0x5C;
     private const int VK_V = 0x56;
     private const int VK_RETURN = 0x0D;
+
+    /// <summary>
+    /// The modifiers a user might be resting on, each side separately.
+    /// </summary>
+    /// <remarks>
+    /// The side matters. The neutral codes (<c>VK_CONTROL</c> and friends) report "either
+    /// side is down", but a synthetic event carrying a neutral code is delivered as the
+    /// <i>left</i> key. So lifting a physically held Right Ctrl by sending a neutral up
+    /// did nothing — Enter went out as Ctrl+Enter — and the neutral re-press afterwards
+    /// pushed a Left Ctrl nobody was holding, which stayed down until the user happened to
+    /// tap it. Every keystroke in between was a shortcut.
+    /// </remarks>
+    private static readonly int[] SidedModifiers =
+        [VK_LCONTROL, VK_RCONTROL, VK_LSHIFT, VK_RSHIFT, VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN];
 
     private const uint MAPVK_VK_TO_VSC = 0;
 
@@ -184,11 +202,14 @@ public sealed class SendInputTextInjector : ITextInjector
     /// </remarks>
     private static bool TypeUnicode(string text)
     {
-        for (var offset = 0; offset < text.Length; offset += ChunkSize)
+        var offset = 0;
+        while (offset < text.Length)
         {
             var length = Math.Min(ChunkSize, text.Length - offset);
 
-            // Never split a surrogate pair across two SendInput calls.
+            // Never split a surrogate pair across two SendInput calls. The next chunk then
+            // starts after the pair — advancing by the fixed chunk size instead re-sent the
+            // low half as a lone surrogate, which lands as U+FFFD.
             if (offset + length < text.Length && char.IsHighSurrogate(text[offset + length - 1])) length++;
 
             var inputs = new INPUT[length * 2];
@@ -200,7 +221,8 @@ public sealed class SendInputTextInjector : ITextInjector
             }
 
             if (SendInput((uint)inputs.Length, inputs, InputSize) != inputs.Length) return false;
-            if (offset + length < text.Length) Thread.Sleep(ChunkGap);
+            offset += length;
+            if (offset < text.Length) Thread.Sleep(ChunkGap);
         }
 
         return true;
@@ -232,41 +254,37 @@ public sealed class SendInputTextInjector : ITextInjector
     /// Shift would otherwise get Ctrl+Shift+V — "paste as plain text", or something else
     /// entirely depending on the app.
     /// </remarks>
-    public static bool PressCtrlV()
-    {
-        var held = new List<int>();
-        foreach (var key in new[] { VK_SHIFT, VK_MENU, VK_LWIN, VK_RWIN })
-        {
-            if ((GetAsyncKeyState(key) & 0x8000) != 0) held.Add(key);
-        }
-
-        var sequence = new List<INPUT>();
-        foreach (var key in held) sequence.Add(KeyInput(key, up: true));
-
-        sequence.Add(KeyInput(VK_CONTROL, up: false));
-        sequence.Add(KeyInput(VK_V, up: false));
-        sequence.Add(KeyInput(VK_V, up: true));
-        sequence.Add(KeyInput(VK_CONTROL, up: true));
-
-        foreach (var key in held) sequence.Add(KeyInput(key, up: false));
-
-        var inputs = sequence.ToArray();
-        return SendInput((uint)inputs.Length, inputs, InputSize) == inputs.Length;
-    }
+    public static bool PressCtrlV() => PressWithoutHeldModifiers(
+        [KeyInput(VK_CONTROL, up: false), KeyInput(VK_V, up: false), KeyInput(VK_V, up: true), KeyInput(VK_CONTROL, up: true)]);
 
     /// <inheritdoc />
     public async ValueTask<bool> SendAsync(CancellationToken cancellationToken)
     {
         // Let typed or pasted characters reach the target before its submit key.
         await Task.Delay(SendSettle, cancellationToken).ConfigureAwait(false);
+        return PressWithoutHeldModifiers([KeyInput(VK_RETURN, up: false), KeyInput(VK_RETURN, up: true)]);
+    }
+
+    /// <summary>
+    /// Sends <paramref name="keys"/> with every physically held modifier lifted first and
+    /// put back afterwards, side-specifically, in one <c>SendInput</c> call.
+    /// </summary>
+    /// <param name="keys">The events to send in the clear.</param>
+    private static bool PressWithoutHeldModifiers(INPUT[] keys)
+    {
         var held = new List<int>();
-        foreach (var key in new[] { VK_CONTROL, VK_SHIFT, VK_MENU, VK_LWIN, VK_RWIN })
+        foreach (var key in SidedModifiers)
+        {
             if ((GetAsyncKeyState(key) & 0x8000) != 0) held.Add(key);
-        var sequence = new List<INPUT>();
+        }
+
+        var sequence = new List<INPUT>(held.Count * 2 + keys.Length);
         foreach (var key in held) sequence.Add(KeyInput(key, up: true));
-        sequence.Add(KeyInput(VK_RETURN, up: false));
-        sequence.Add(KeyInput(VK_RETURN, up: true));
+        sequence.AddRange(keys);
+        // Re-pressed in the same call, so the gap in which the user could physically let go
+        // is a few microseconds; their real key-up afterwards then clears the synthetic one.
         foreach (var key in held) sequence.Add(KeyInput(key, up: false));
+
         var inputs = sequence.ToArray();
         return SendInput((uint)inputs.Length, inputs, InputSize) == inputs.Length;
     }
@@ -316,7 +334,7 @@ public sealed class SendInputTextInjector : ITextInjector
     }
 
     private static bool IsExtendedKey(int virtualKey) => virtualKey is
-        0xA3 or 0xA5 or 0x5B or 0x5C or   // right ctrl/alt, both Windows keys
+        VK_RCONTROL or VK_RMENU or VK_LWIN or VK_RWIN or   // right ctrl/alt, both Windows keys
         0x2D or 0x2E or 0x24 or 0x23 or   // insert, delete, home, end
         0x21 or 0x22 or                   // page up/down
         0x25 or 0x26 or 0x27 or 0x28;     // arrows

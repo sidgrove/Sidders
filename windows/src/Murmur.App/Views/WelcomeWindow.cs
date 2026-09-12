@@ -77,12 +77,21 @@ public sealed class WelcomeWindow : ShellWindow
             Card.Standard(Panels.Section("Choose your key",
                 "Pick something you never use for typing. Right Ctrl is the safe default.", _key)),
             Card.Standard(Panels.Section("Try it",
-                "Click in the box, then use your key and speak. Escape cancels.",
+                "Click in the box, then use your key and speak. Escape cancels a recording.",
                 Panels.Column(Tokens.Space.Base, _playground, _playgroundHint))),
         ];
 
         _composition.Engine?.Completed += OnCompleted;
         Closed += (_, _) => { if (_composition.Engine is { } e) e.Completed -= OnCompleted; };
+
+        // On the playground step Escape means "cancel the recording", as the card says. A
+        // sheet closes on Escape, and that closed the walkthrough mid-dictation without
+        // marking it done — so it came straight back on the next launch. Tunnelled so it
+        // runs before the sheet's own handler.
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Avalonia.Input.Key.Escape && _step == 2) e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         Go(0);
     }

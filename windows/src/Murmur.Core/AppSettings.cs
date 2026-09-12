@@ -64,19 +64,15 @@ public sealed record SettingsData
     public bool KeepHistory { get; set; } = true;
 
     /// <summary>
-    /// Whether a lone sentence loses its trailing full stop. See
-    /// <see cref="TranscriptPolish.DropTrailingFullStopIfSingleSentence"/>.
+    /// Legacy. Superseded by <see cref="FullStops"/>; read once at load to migrate an older
+    /// file, then always written back as true. Nothing else reads it.
     /// </summary>
     public bool DropSingleSentenceFullStop { get; set; } = true;
 
     /// <summary>
-    /// Tap the key once to start and once to stop, instead of holding it.
+    /// Legacy. Superseded by <see cref="Mode"/>; read once at load to migrate an older
+    /// file, then always written back as false. Nothing else reads it.
     /// </summary>
-    /// <remarks>
-    /// Holding a modifier is also how Windows accessibility shortcuts are armed: eight
-    /// seconds on Right Shift opens the Filter Keys prompt, five taps opens Sticky Keys.
-    /// Tap-to-toggle sidesteps the first entirely.
-    /// </remarks>
     public bool TapToToggle { get; set; }
 
     /// <summary>Whether transcripts go through the generative clean-up before typing.</summary>
@@ -134,13 +130,27 @@ public sealed class AppSettings
     /// <summary>Raised after a successful save.</summary>
     public event EventHandler? Changed;
 
-    /// <summary>Replaces and persists the settings.</summary>
+    /// <summary>
+    /// Replaces and persists the settings.
+    /// </summary>
+    /// <remarks>
+    /// The in-memory value is updated even when the disk write fails — an antivirus scan
+    /// or a sync client holding the file for a moment must not undo a change the user just
+    /// made, and must not crash the text box they made it in. The failure goes to the log
+    /// and the next save tries again.
+    /// </remarks>
     public void Update(SettingsData data)
     {
         Data = data;
 
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        File.WriteAllText(_path, JsonSerializer.Serialize(data, SettingsJsonContext.Default.SettingsData));
+        try
+        {
+            AtomicFile.WriteAllText(_path, JsonSerializer.Serialize(data, SettingsJsonContext.Default.SettingsData));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"settings could not be saved: {e.Message}");
+        }
 
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -156,13 +166,30 @@ public sealed class AppSettings
             var data = JsonSerializer.Deserialize(File.ReadAllText(path), SettingsJsonContext.Default.SettingsData)
                        ?? new SettingsData();
 
-            // Files written before activation modes existed carry only the tap switch.
-            if (data.TapToToggle && data.Mode == ActivationMode.Automatic) data.Mode = ActivationMode.Tap;
-            if (!data.DropSingleSentenceFullStop && data.FullStops == TrailingFullStop.DropAfterSingleSentence) data.FullStops = TrailingFullStop.Keep;
+            // Files written before activation modes and the full-stop rule existed carry
+            // only the two old switches. Map each once, then neutralise it, so the mapping
+            // cannot re-apply on a later launch and silently undo a choice made since.
+            if (data.TapToToggle)
+            {
+                if (data.Mode == ActivationMode.Automatic) data.Mode = ActivationMode.Tap;
+                data.TapToToggle = false;
+            }
+            if (!data.DropSingleSentenceFullStop)
+            {
+                if (data.FullStops == TrailingFullStop.DropAfterSingleSentence) data.FullStops = TrailingFullStop.Keep;
+                data.DropSingleSentenceFullStop = true;
+            }
             return data;
         }
-        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
+        catch (JsonException e)
         {
+            Log.Warn($"settings file was unreadable and has been set aside: {e.Message}");
+            AtomicFile.SetAside(path);
+            return new SettingsData();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"settings could not be read: {e.Message}");
             return new SettingsData();
         }
     }

@@ -83,6 +83,14 @@ public sealed record DictationResult(
 /// a model that would not load simply vanished and the panel did nothing. Now each path
 /// catches, logs, raises <see cref="Faulted"/>, and always returns to <see cref="DictationState.Idle"/>.
 /// </para>
+/// <para>
+/// <b>Recording and transcribing overlap.</b> Each press opens a <see cref="Session"/> with its
+/// own buffer, token and preview; releasing hands that session to a transcription queue and
+/// the next press can start at once, while the previous words are still being cleaned up.
+/// Transcriptions run one at a time, in order, so text lands in the order it was spoken.
+/// Before this a tap during the Transcribing state did nothing, which read as "sometimes
+/// it doesn't start".
+/// </para>
 /// </remarks>
 public sealed class DictationEngine : IAsyncDisposable
 {
@@ -102,16 +110,55 @@ public sealed class DictationEngine : IAsyncDisposable
     private readonly IClock _clock;
     private readonly Func<IReadOnlyList<DictionaryEntry>> _dictionary;
 
+    /// <summary>Serialises the start and end of recordings.</summary>
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private CancellationTokenSource? _recording;
-    private List<float>? _buffer;
-    private DateTimeOffset _startedAt;
+
+    /// <summary>
+    /// One press-to-release. Everything that belongs to a single recording lives here, so
+    /// a new recording can begin while the previous one is still being transcribed.
+    /// </summary>
+    private sealed class Session : IDisposable
+    {
+        public readonly List<float> Buffer = [];
+        public readonly CancellationTokenSource Stop = new();
+        public DateTimeOffset StartedAt;
+        public bool Heard;
+        public bool CaptureReady;
+        public TimeSpan PreRoll;
+        public Task? Preview;
+        public Task? CaptureLoop;
+
+        public void Dispose() => Stop.Dispose();
+    }
+
+    /// <summary>The recording in progress, or null. Written only under <see cref="_bufferLock"/>.</summary>
+    private Session? _current;
+
+    /// <summary>
+    /// Guards <see cref="_current"/> and the current session's buffer. The capture loop
+    /// appends on the audio thread while the preview snapshots on a pool thread; a
+    /// <c>List&lt;float&gt;</c> is not safe for that, and a torn read showed up as the preview
+    /// silently dying mid-dictation.
+    /// </summary>
+    private readonly Lock _bufferLock = new();
+
+    /// <summary>Transcriptions in flight. Non-zero is the Transcribing state.</summary>
+    private int _transcribing;
+
+    /// <summary>The tail of the transcription queue; each new one waits for it.</summary>
+    private Task _finishChain = Task.CompletedTask;
+
+    /// <summary>The most recent capture loop, awaited before the next one opens the device.</summary>
+    private Task? _lastCaptureLoop;
 
     /// <summary>Current state.</summary>
-    public DictationState State { get; private set; } = DictationState.Idle;
+    public DictationState State =>
+        _current is not null ? DictationState.Recording
+        : Volatile.Read(ref _transcribing) > 0 ? DictationState.Transcribing
+        : DictationState.Idle;
 
     /// <summary>True once the microphone has delivered audio for this recording.</summary>
-    public bool IsCaptureReady { get; private set; }
+    public bool IsCaptureReady => _current?.CaptureReady == true;
 
     /// <summary>Most recent input level, 0…1. Drives the meter.</summary>
     public float Level { get; private set; }
@@ -209,7 +256,16 @@ public sealed class DictationEngine : IAsyncDisposable
     /// <summary>Preview needs at least this much audio to be worth decoding.</summary>
     public static readonly TimeSpan PreviewMinimum = TimeSpan.FromSeconds(1);
 
-    private Task? _preview;
+    /// <summary>
+    /// How much of the newest audio the preview decodes. Everything before it has already
+    /// been shown and does not change, so re-decoding it every tick only costs time and
+    /// memory — a 60-second pass is about 2.5 GB, and past the encoder's ceiling it throws.
+    /// </summary>
+    public static readonly TimeSpan PreviewWindow = TimeSpan.FromSeconds(25);
+
+    /// <summary>How long shutdown waits for a dictation in flight before giving up on it.</summary>
+    public static readonly TimeSpan DisposeGrace = TimeSpan.FromSeconds(5);
+
     private DateTimeOffset _pressedAt;
 
     /// <summary>The generative clean-up, or null when none is configured.</summary>
@@ -252,6 +308,13 @@ public sealed class DictationEngine : IAsyncDisposable
         remove => _hotkey.Captured -= value;
     }
 
+    /// <summary>Raised when a capture ends because the user pressed Escape. Hook thread.</summary>
+    public event EventHandler? CaptureCancelled
+    {
+        add => _hotkey.CaptureCancelled += value;
+        remove => _hotkey.CaptureCancelled -= value;
+    }
+
     /// <summary>Records the next chord instead of acting on it.</summary>
     public void BeginCapture() => _hotkey.BeginCapture();
 
@@ -276,6 +339,13 @@ public sealed class DictationEngine : IAsyncDisposable
 
     /// <summary>Raised with a human-readable message when something went wrong.</summary>
     public event EventHandler<string>? Faulted;
+
+    /// <summary>
+    /// Raised when a recording ended and nothing was typed, with a short reason such as
+    /// "Nothing heard". Not a fault: the user simply did not say anything usable, and an
+    /// overlay that just vanishes reads as the app having failed.
+    /// </summary>
+    public event EventHandler<string>? Dropped;
 
     /// <summary>Wires the engine to its platform implementations.</summary>
     /// <param name="capture">Microphone source.</param>
@@ -350,18 +420,19 @@ public sealed class DictationEngine : IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// Routed through the same state machine as the hotkey, deliberately. Two independent
-    /// paths into recording would eventually disagree about whether it is running.
+    /// paths into recording would eventually disagree about whether it is running. A press
+    /// while the previous dictation is still transcribing starts a new recording.
     /// </remarks>
     public void TogglePushToTalk()
     {
-        if (State == DictationState.Idle) _ = BeginAsync();
-        else if (State == DictationState.Recording) _ = EndAsync();
+        if (_current is null) _ = BeginAsync();
+        else _ = EndAsync();
     }
 
     /// <summary>Discards the recording in progress, typing nothing.</summary>
     public void Cancel()
     {
-        if (State == DictationState.Recording) _ = AbandonRecordingAsync();
+        if (_current is { } session) _ = AbandonAsync(session);
     }
 
     private void OnPressed(object? sender, EventArgs e)
@@ -383,7 +454,7 @@ public sealed class DictationEngine : IAsyncDisposable
 
     private void OnReleased(object? sender, EventArgs e)
     {
-        if (!IsEnabled && State == DictationState.Idle) return;
+        if (!IsEnabled && _current is null) return;
 
         switch (Mode)
         {
@@ -401,18 +472,26 @@ public sealed class DictationEngine : IAsyncDisposable
 
     private async Task BeginAsync()
     {
+        Session session;
+        Task? previousLoop;
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (!IsEnabled || State != DictationState.Idle) return;
+            if (!IsEnabled || _current is not null) return;
 
-            _buffer = [];
-            _startedAt = _clock.Now;
-            _heard = false;
-            _recording = new CancellationTokenSource();
+            // Owned by the engine until EndAsync or AbandonAsync hands it on; disposed
+            // once its transcription (or its cancellation) has finished with the token.
+            session = new Session { StartedAt = _clock.Now };
+            lock (_bufferLock) _current = session;
             SetPreview(string.Empty);
-            SetState(DictationState.Recording);
-            _preview = PreviewLoopAsync(_recording.Token);
+            Changed?.Invoke(this, EventArgs.Empty);
+            session.Preview = PreviewLoopAsync(session);
+
+            // The previous recording's loop may still be closing its capture enumerator;
+            // the device cannot be opened twice, so this one waits for it first.
+            previousLoop = _lastCaptureLoop;
+            session.CaptureLoop = CaptureLoopAsync(session, previousLoop);
+            _lastCaptureLoop = session.CaptureLoop;
         }
         finally
         {
@@ -422,37 +501,53 @@ public sealed class DictationEngine : IAsyncDisposable
         // The user is about to talk for a while; use that time to open the clean-up connection.
         if (AiCleanup && Cleaner is { } warm) _ = WarmUpCleanerAsync(warm);
 
+        await session.CaptureLoop.ConfigureAwait(false);
+    }
+
+    private bool IsCurrent(Session session) => ReferenceEquals(_current, session);
+
+    private async Task CaptureLoopAsync(Session session, Task? previousLoop)
+    {
+        if (previousLoop is { IsCompleted: false })
+        {
+            try { await previousLoop.ConfigureAwait(false); }
+            catch (Exception) { /* reported when it happened */ }
+        }
+
+        var token = session.Stop.Token;
         try
         {
-            await foreach (var chunk in _capture.CaptureAsync(_recording!.Token).ConfigureAwait(false))
+            await foreach (var chunk in _capture.CaptureAsync(token).ConfigureAwait(false))
             {
-                // Stop consuming the moment recording ends. Cancellation is cooperative, so
-                // chunks already queued still arrive after EndAsync has moved on — and
-                // without this guard one of them sets Level back to a reading that has
-                // already been zeroed.
-                if (State != DictationState.Recording) break;
-
-                // Copied, not referenced: capture implementations are entitled to reuse
-                // their buffer the moment this returns.
-                _buffer?.AddRange(chunk.Samples.Span);
+                // Stop consuming the moment this recording ends. Cancellation is
+                // cooperative, so chunks already queued still arrive after EndAsync has
+                // moved on — and without this guard one of them sets Level back to a
+                // reading that has already been zeroed.
+                lock (_bufferLock)
+                {
+                    if (!IsCurrent(session)) break;
+                    // Copied, not referenced: capture implementations are entitled to reuse
+                    // their buffer the moment this returns.
+                    session.Buffer.AddRange(chunk.Samples.Span);
+                }
                 Level = chunk.Rms();
-                if (!_heard && Level >= SilenceFloor)
+                if (!session.Heard && Level >= SilenceFloor)
                 {
                     // How long after the key press the device produced sound rather than
                     // zeros. With the warm capture this should read zero or close to it.
-                    _heard = true;
-                    Log.Info($"first audible audio after {(_clock.Now - _startedAt).TotalMilliseconds:0} ms");
+                    session.Heard = true;
+                    Log.Info($"first audible audio after {(_clock.Now - session.StartedAt).TotalMilliseconds:0} ms");
                 }
-                if (!IsCaptureReady)
+                if (!session.CaptureReady)
                 {
                     lock (_audioLock)
                     {
-                        if (State != DictationState.Recording) break;
-                        IsCaptureReady = true;
-                        Log.Info($"microphone delivering audio after {(_clock.Now - _startedAt).TotalMilliseconds:0} ms");
+                        if (!IsCurrent(session)) break;
+                        session.CaptureReady = true;
+                        Log.Info($"microphone delivering audio after {(_clock.Now - session.StartedAt).TotalMilliseconds:0} ms");
                         // Capture is already running and queueing audio while Windows enumerates
                         // and mutes sessions. Never put that work ahead of opening the microphone.
-                        if (_isEnabled && _duckAudio && Ducker is { } ducker)
+                        if (_isEnabled && _duckAudio && !_ducked && Ducker is { } ducker)
                         {
                             _ducked = true;
                             ducker.Duck();
@@ -461,6 +556,15 @@ public sealed class DictationEngine : IAsyncDisposable
                     }
                 }
                 Changed?.Invoke(this, EventArgs.Empty);
+            }
+
+            // The stream ended on its own while the key was still down: a device that
+            // stopped cleanly, or a test fake that ran out of audio. What was captured is
+            // kept and transcribed on release; the user should not lose a sentence to a
+            // hiccup they cannot see.
+            if (IsCurrent(session) && !token.IsCancellationRequested)
+            {
+                Log.Warn("microphone stream ended before the key was released; keeping what was captured");
             }
         }
         catch (OperationCanceledException)
@@ -473,18 +577,20 @@ public sealed class DictationEngine : IAsyncDisposable
             // recording that was in flight is over; say so and get back to Idle.
             Log.Error("audio capture failed", e);
             Fault($"The microphone could not be opened: {e.Message}");
-            await AbandonRecordingAsync().ConfigureAwait(false);
+            await AbandonAsync(session).ConfigureAwait(false);
         }
         finally
         {
-            // Authoritative: this runs only once the capture loop has genuinely finished, so
-            // nothing can raise the level afterwards and leave the meter stuck.
-            Level = 0;
-            Changed?.Invoke(this, EventArgs.Empty);
+            // Authoritative for this recording: once its loop has genuinely finished nothing
+            // can raise the level afterwards and leave the meter stuck. A newer recording
+            // owns the meter now and is left alone.
+            if (_current is null || IsCurrent(session))
+            {
+                Level = 0;
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
-
-    private bool _heard;
 
     private static async Task WarmUpCleanerAsync(ITranscriptCleaner cleaner)
     {
@@ -492,24 +598,29 @@ public sealed class DictationEngine : IAsyncDisposable
         catch (Exception e) { Log.Warn($"clean-up warm-up failed: {e.Message}"); }
     }
 
-    private async Task AbandonRecordingAsync()
+    private async Task AbandonAsync(Session session)
     {
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (State != DictationState.Recording) return;
-            if (_recording is not null) await _recording.CancelAsync().ConfigureAwait(false);
-            _buffer = null;
-            _recording?.Dispose();
-            _recording = null;
+            if (!IsCurrent(session)) return;
+            lock (_bufferLock) _current = null;
+            await session.Stop.CancelAsync().ConfigureAwait(false);
+            Level = 0;
+            RestoreAudio();
             SetPreview(string.Empty);
-            SetState(DictationState.Idle);
+            Changed?.Invoke(this, EventArgs.Empty);
             Log.Info("recording cancelled");
         }
         finally
         {
             _gate.Release();
         }
+
+        // The preview may still be inside the model; let it finish before the token source
+        // goes away, so the next recording never shares the recogniser with a stale decode.
+        if (session.Preview is { } preview) await preview.ConfigureAwait(false);
+        session.Dispose();
     }
 
     /// <summary>
@@ -517,35 +628,80 @@ public sealed class DictationEngine : IAsyncDisposable
     /// spoken rather than all at once on release.
     /// </summary>
     /// <remarks>
-    /// The offline model decodes many times faster than real time, so a whole-buffer pass
-    /// every 700 ms costs a fraction of a second even for a long dictation. A tick that
-    /// finds the previous one still running is skipped, and the final pass waits for the
-    /// last tick so the model is never asked to decode two streams at once.
+    /// The offline model decodes many times faster than real time, so a pass over the live
+    /// window every 700 ms costs a fraction of a second. A tick that finds the previous one
+    /// still running is skipped, and the final pass waits for the last tick so the model is
+    /// never asked to decode two streams at once.
     /// </remarks>
-    private async Task PreviewLoopAsync(CancellationToken cancellationToken)
+    private async Task PreviewLoopAsync(Session session)
     {
+        var cancellationToken = session.Stop.Token;
+
+        // Text decoded from audio that has since scrolled out of the window. Fixed once
+        // committed, so the running transcript reads as one piece rather than flickering.
+        var committed = string.Empty;
+        var committedSamples = 0;
+        var windowSamples = (int)(PreviewWindow.TotalSeconds * AudioChunk.SampleRate);
+        var minimumSamples = (int)(PreviewMinimum.TotalSeconds * AudioChunk.SampleRate);
+
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(PreviewInterval, cancellationToken).ConfigureAwait(false);
+
+                // A key-up the hook never saw — delivered to an elevated window or the
+                // secure desktop — would otherwise leave the recording running until the
+                // next press. Only in Hold mode: a tap in Automatic mode is meant to keep
+                // recording with the key up.
+                if (Mode == ActivationMode.Hold && IsCurrent(session) && !_hotkey.IsTriggerHeld)
+                {
+                    Log.Warn("the key is up but no release was seen; ending the recording");
+                    _ = EndAsync();
+                    return;
+                }
+
                 if (!_transcriber.IsReady) continue;
 
-                float[]? snapshot;
-                await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
+                float[] snapshot;
+                float[]? toCommit = null;
+                lock (_bufferLock)
                 {
-                    if (State != DictationState.Recording || _buffer is null) return;
-                    if (_buffer.Count < PreviewMinimum.TotalSeconds * AudioChunk.SampleRate) continue;
-                    snapshot = _buffer.ToArray();
+                    if (!IsCurrent(session)) return;
+                    if (session.Buffer.Count < minimumSamples) continue;
+
+                    var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(session.Buffer);
+
+                    // Once the live window outgrows its limit, decode its older half once
+                    // and freeze that text; from then on only the newest audio is
+                    // re-decoded. The cut lands on the quietest moment so it falls between
+                    // words rather than through one.
+                    if (session.Buffer.Count - committedSamples > windowSamples)
+                    {
+                        var idealCut = session.Buffer.Count - (windowSamples / 2);
+                        var cut = AudioSegmenter.QuietestPoint(span, idealCut - (AudioSegmenter.SilenceSearchSeconds * AudioChunk.SampleRate), idealCut);
+                        if (cut > committedSamples)
+                        {
+                            toCommit = span[committedSamples..cut].ToArray();
+                            committedSamples = cut;
+                        }
+                    }
+
+                    snapshot = span[committedSamples..].ToArray();
                 }
-                finally
+
+                if (toCommit is not null)
                 {
-                    _gate.Release();
+                    var frozen = (await _transcriber.TranscribeAsync(toCommit, [], cancellationToken).ConfigureAwait(false)).Trim();
+                    if (frozen.Length > 0) committed = committed.Length == 0 ? frozen : committed + " " + frozen;
                 }
 
                 var text = await _transcriber.TranscribeAsync(snapshot, [], cancellationToken).ConfigureAwait(false);
-                if (!cancellationToken.IsCancellationRequested && State == DictationState.Recording) SetPreview(text.Trim());
+                if (!cancellationToken.IsCancellationRequested && IsCurrent(session))
+                {
+                    var tail = text.Trim();
+                    SetPreview(committed.Length == 0 ? tail : tail.Length == 0 ? committed : committed + " " + tail);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -569,29 +725,46 @@ public sealed class DictationEngine : IAsyncDisposable
     private async Task EndAsync()
     {
         var deliveryClock = System.Diagnostics.Stopwatch.StartNew();
-        List<float>? samples;
+        Task work;
 
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (State != DictationState.Recording) return;
+            if (_current is not { } session) return;
 
-            await _recording!.CancelAsync().ConfigureAwait(false);
-            samples = _buffer;
-            _buffer = null;
+            // Counted as transcribing BEFORE the session is cleared, so State goes straight
+            // from Recording to Transcribing and never reads Idle in between — a watcher
+            // that saw Idle here would believe the dictation was over before it began.
+            Interlocked.Increment(ref _transcribing);
+            lock (_bufferLock) _current = null;
+            await session.Stop.CancelAsync().ConfigureAwait(false);
+            // Read now, before the next recording can start and overwrite it.
+            session.PreRoll = _capture.PreRollDelivered;
             Level = 0;
-            SetState(DictationState.Transcribing);
+            RestoreAudio();
+            Changed?.Invoke(this, EventArgs.Empty);
+
+            // Queued behind any transcription still running, so two dictations spoken back
+            // to back are typed in the order they were spoken.
+            work = FinishAsync(session, _finishChain, deliveryClock);
+            _finishChain = work;
         }
         finally
         {
             _gate.Release();
         }
 
+        await work.ConfigureAwait(false);
+    }
+
+    private async Task FinishAsync(Session session, Task previous, System.Diagnostics.Stopwatch deliveryClock)
+    {
         try
         {
-            if (_preview is { } preview) await preview.ConfigureAwait(false);
+            if (session.Preview is { } preview) await preview.ConfigureAwait(false);
+            await previous.ConfigureAwait(false);
             Log.Info($"stop-to-final processing: {deliveryClock.ElapsedMilliseconds} ms (capture stop and preview wait)");
-            await ProcessAsync(samples).ConfigureAwait(false);
+            await ProcessAsync(session).ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -601,11 +774,11 @@ public sealed class DictationEngine : IAsyncDisposable
         finally
         {
             Log.Info($"stop-to-complete: {deliveryClock.ElapsedMilliseconds} ms");
-            _recording?.Dispose();
-            _recording = null;
-            _preview = null;
-            SetPreview(string.Empty);
-            SetState(DictationState.Idle);
+            session.Dispose();
+            Interlocked.Decrement(ref _transcribing);
+            // A newer recording owns the preview now; only an idle engine clears it.
+            if (_current is null) SetPreview(string.Empty);
+            Changed?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -632,28 +805,34 @@ public sealed class DictationEngine : IAsyncDisposable
     /// </summary>
     public const float SilenceFloor = 0.002f;
 
-    private async Task ProcessAsync(List<float>? samples)
+    private async Task ProcessAsync(Session session)
     {
-        if (samples is null || samples.Count == 0) return;
+        var samples = session.Buffer;
+        if (samples.Count == 0) return;
 
         var seconds = (double)samples.Count / AudioChunk.SampleRate;
-        var utterance = seconds - _capture.PreRollDelivered.TotalSeconds;
+        var utterance = seconds - session.PreRoll.TotalSeconds;
         if (utterance < MinimumUtterance.TotalSeconds)
         {
             Log.Info($"ignored a {utterance * 1000:0} ms tap of the key");
             return;
         }
 
-        if (new AudioChunk(samples.ToArray()).Rms() < SilenceFloor && !_capture.LooksLikeBlockedMicrophone)
+        var audio = new ReadOnlyMemory<float>(samples.ToArray());
+        if (new AudioChunk(audio).Rms() < SilenceFloor)
         {
-            Log.Info($"ignored {seconds:0.0}s of silence");
-            return;
-        }
+            // Only a recording that was itself silent can mean the microphone is blocked.
+            // The flag is a property of the device stream, and a stale one — a headset
+            // muted for a call, unmuted since — must never throw away audible speech.
+            if (_capture.LooksLikeBlockedMicrophone)
+            {
+                Log.Warn("capture delivered only digital silence — microphone looks blocked");
+                Fault(BlockedMicrophoneMessage);
+                return;
+            }
 
-        if (_capture.LooksLikeBlockedMicrophone)
-        {
-            Log.Warn("capture delivered only digital silence — microphone looks blocked");
-            Fault(BlockedMicrophoneMessage);
+            Log.Info($"ignored {seconds:0.0}s of silence");
+            Dropped?.Invoke(this, "Nothing heard");
             return;
         }
 
@@ -669,7 +848,6 @@ public sealed class DictationEngine : IAsyncDisposable
         // Measured from key release, because that is the wait the user actually feels — and
         // it is the only figure on which a streaming and a batch engine compare honestly.
         var releasedAt = _clock.Now;
-        var audio = new ReadOnlyMemory<float>(samples.ToArray());
 
         var entries = _dictionary();
         var bias = DictionaryCorrector.BiasPhrases(entries);
@@ -690,7 +868,11 @@ public sealed class DictationEngine : IAsyncDisposable
         Log.Info($"transcribed {audio.Length / (double)AudioChunk.SampleRate:0.0}s of audio "
                + $"in {(_clock.Now - releasedAt).TotalMilliseconds:0} ms: {raw.Length} chars");
 
-        if (string.IsNullOrWhiteSpace(raw)) return;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            Dropped?.Invoke(this, "Nothing heard");
+            return;
+        }
 
         // The dictionary runs first and unconditionally. Biasing only raises the odds of the
         // right word; this is the pass that guarantees it.
@@ -714,6 +896,7 @@ public sealed class DictationEngine : IAsyncDisposable
         if (string.IsNullOrWhiteSpace(local))
         {
             Log.Info("nothing left after rules (a filler, or a command with nothing before it)");
+            Dropped?.Invoke(this, "Nothing to type");
             return;
         }
 
@@ -743,7 +926,7 @@ public sealed class DictationEngine : IAsyncDisposable
             }
             else
             {
-                Log.Warn($"AI clean-up ({cleaner.Name}) returned nothing; typed the local text");
+                Log.Warn($"AI clean-up ({cleaner.Name}) returned nothing ({cleaner.LastError ?? "no reason given"}); typed the local text");
                 cleanupFailed = true;
                 Fault("AI clean-up did not respond, so the local transcript was typed. Check the key and connection in Settings.");
             }
@@ -766,6 +949,9 @@ public sealed class DictationEngine : IAsyncDisposable
             CleanupFailed: cleanupFailed);
 
         if (cleanedBy is not null || !AiCleanup) LastFault = null;
+
+        // The clipboard copy comes first, deliberately: whatever happens to the typing, the
+        // words are already somewhere the user can get at them.
         if (CopyTranscriptAsync is { } copy)
         {
             try { await copy(corrected).ConfigureAwait(false); }
@@ -781,12 +967,29 @@ public sealed class DictationEngine : IAsyncDisposable
         if (!delivered)
         {
             Log.Warn("text could not be delivered to the focused app");
-            Fault("The text could not be typed into the focused app. It is in the history — press COPY.");
+            Fault("The text could not be typed into the focused app. It is on the clipboard and in the history.");
         }
         else if (send)
         {
             await SendToFocusedAppAsync().ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Types the most recent transcript again into whatever has focus now.
+    /// </summary>
+    /// <remarks>
+    /// The recovery for text that landed in the wrong window, which otherwise means opening
+    /// the history, copying and pasting by hand.
+    /// </remarks>
+    /// <returns>False if there is nothing to retype or it could not be delivered.</returns>
+    public async Task<bool> RetypeAsync(string text)
+    {
+        if (string.IsNullOrEmpty(text) || State != DictationState.Idle) return false;
+        var delivered = await _injector.InjectAsync(text, CancellationToken.None).ConfigureAwait(false);
+        Log.Info($"retyped last transcript; accepted={delivered}");
+        if (!delivered) Fault("The text could not be typed into the focused app.");
+        return delivered;
     }
 
     private async Task SendToFocusedAppAsync()
@@ -815,20 +1018,6 @@ public sealed class DictationEngine : IAsyncDisposable
         Faulted?.Invoke(this, message);
     }
 
-    private void SetState(DictationState state)
-    {
-        lock (_audioLock)
-        {
-            State = state;
-            if (state != DictationState.Recording)
-            {
-                IsCaptureReady = false;
-                RestoreAudio();
-            }
-        }
-        Changed?.Invoke(this, EventArgs.Empty);
-    }
-
     private void RestoreAudio()
     {
         lock (_audioLock)
@@ -839,6 +1028,7 @@ public sealed class DictationEngine : IAsyncDisposable
             Log.Info("other audio restored");
         }
     }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
@@ -847,11 +1037,21 @@ public sealed class DictationEngine : IAsyncDisposable
         _hotkey.CancelPressed -= OnCancelPressed;
         _hotkey.Dispose();
 
-        if (_recording is not null)
+        var current = _current;
+        if (current is not null)
         {
-            await _recording.CancelAsync().ConfigureAwait(false);
-            _recording.Dispose();
+            lock (_bufferLock) _current = null;
+            await current.Stop.CancelAsync().ConfigureAwait(false);
         }
+
+        // A quit during a dictation must not pull the model out from under a decode that
+        // is still running on a pool thread — that is a native use-after-free, not an
+        // exception. Wait for the preview and the transcription queue, briefly.
+        var inFlight = new[] { current?.Preview, current?.CaptureLoop, _finishChain }.Where(t => t is not null).Select(t => t!).ToArray();
+        try { await Task.WhenAll(inFlight).WaitAsync(DisposeGrace).ConfigureAwait(false); }
+        catch (Exception e) when (e is TimeoutException or OperationCanceledException) { Log.Warn("shutdown did not wait for the dictation in flight"); }
+
+        current?.Dispose();
 
         // Belt and braces: a recording cut short by shutdown must not leave the user's
         // music at a whisper.

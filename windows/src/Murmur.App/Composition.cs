@@ -76,15 +76,29 @@ public sealed class Composition : IAsyncDisposable
         AppPaths.MigrateLegacyFolder();
         Log.Info($"{AppPaths.ProductName} starting: {Environment.ProcessPath} on {Environment.OSVersion}");
 
+        // The platform layer cannot reference the log; give it a way in. Before this, a
+        // ducker that had given up for good said so only in a Debug build.
+        PlatformDiagnostics.Sink = message => Log.Warn($"platform: {message}");
+
         var settings = new AppSettings(AppSettings.DefaultPath);
         var dictionary = new DictionaryFile(DictionaryFile.DefaultPath);
         var transcripts = new TranscriptStore(TranscriptStore.DefaultPath);
 
         // Warm: the microphone stays open between dictations so the first word is never lost
         // to device start-up, and the moments before the key press are included.
-        IAudioCapture? capture = PlatformFactory.CreateAudioCapture(() => settings.Data.MicrophoneDeviceId) is { } device
+        WarmAudioCapture? capture = PlatformFactory.CreateAudioCapture(() => settings.Data.MicrophoneDeviceId) is { } device
             ? new WarmAudioCapture(device)
             : null;
+
+        // A different microphone chosen in Settings must be the one the next recording
+        // uses; a warm stream would otherwise keep the old device open for minutes.
+        var lastMicrophone = settings.Data.MicrophoneDeviceId;
+        settings.Changed += (_, _) =>
+        {
+            if (settings.Data.MicrophoneDeviceId == lastMicrophone) return;
+            lastMicrophone = settings.Data.MicrophoneDeviceId;
+            capture?.ReopenDevice();
+        };
         var hotkey = PlatformFactory.CreateHotkeySource(settings.Data.PushToTalkKey);
         var injector = PlatformFactory.CreateTextInjector();
         var startup = PlatformFactory.CreateStartupRegistration();
@@ -108,6 +122,8 @@ public sealed class Composition : IAsyncDisposable
 
             engine = new DictationEngine(
                 capture!, hotkey!, transcriber, injector!,
+                // The engine reads this on a pool thread mid-transcription; DictionaryFile
+                // hands back an immutable snapshot, so a click in the editor cannot race it.
                 () => dictionary.Entries)
             {
                 InjectText = settings.Data.InjectText,

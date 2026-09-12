@@ -23,6 +23,14 @@ namespace Murmur.Core;
 /// microphone indicator does not stay lit all day.
 /// </para>
 /// <para>
+/// <b>One pump at a time.</b> The inner capture is a single device object and cannot be
+/// opened twice. A pump that is winding down — after the idle timeout, or because the user
+/// picked a different microphone — is awaited before a new one starts, and a pump that is no
+/// longer current never completes a session or clears a ring that now belongs to its
+/// successor. The first version had exactly that race, and the dictation that landed on the
+/// five-minute boundary was lost without a word.
+/// </para>
+/// <para>
 /// This lives in Core, not the platform layer, so it runs against the fake capture in CI.
 /// </para>
 /// </remarks>
@@ -45,6 +53,7 @@ public sealed class WarmAudioCapture : IAudioCapture
     private CancellationTokenSource? _pump;
     private Task? _pumpTask;
     private CancellationTokenSource? _idle;
+    private bool _reopenWanted;
 
     /// <summary>Wraps <paramref name="inner"/>.</summary>
     public WarmAudioCapture(IAudioCapture inner, TimeSpan? preRoll = null, TimeSpan? idleTimeout = null)
@@ -63,7 +72,7 @@ public sealed class WarmAudioCapture : IAudioCapture
     public TimeSpan IdleTimeout { get; }
 
     /// <summary>Whether the inner device is open, recording or not.</summary>
-    public bool IsWarm => _pumpTask is { IsCompleted: false };
+    public bool IsWarm => _pump is not null && _pumpTask is { IsCompleted: false };
 
     /// <inheritdoc />
     public bool IsCapturing => _session is not null;
@@ -74,9 +83,41 @@ public sealed class WarmAudioCapture : IAudioCapture
     /// <inheritdoc />
     public TimeSpan PreRollDelivered { get; private set; }
 
+    /// <summary>
+    /// Closes the device so the next recording opens it afresh — after the user picks a
+    /// different microphone in Settings.
+    /// </summary>
+    /// <remarks>
+    /// The inner capture reads the chosen device id only when it opens, so a warm stream
+    /// would otherwise keep recording from the old microphone until the idle timeout. If a
+    /// recording is in progress the reopen waits until it ends; that recording keeps the
+    /// device it started with.
+    /// </remarks>
+    public void ReopenDevice()
+    {
+        CancellationTokenSource? pump = null;
+        lock (_lock)
+        {
+            _reopenWanted = true;
+            if (_session is null) pump = ReleaseLocked();
+        }
+        pump?.Cancel();
+        if (pump is not null) Log.Info("microphone released to switch device");
+    }
+
     /// <inheritdoc />
     public async IAsyncEnumerable<AudioChunk> CaptureAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        // A pump that has been told to stop is still holding the device until its task
+        // finishes. Wait for it rather than open the device twice.
+        Task? draining;
+        lock (_lock) draining = _pump is null ? _pumpTask : null;
+        if (draining is { IsCompleted: false })
+        {
+            try { await draining.ConfigureAwait(false); }
+            catch (Exception) { /* reported when it happened */ }
+        }
+
         Channel<AudioChunk> session;
         lock (_lock)
         {
@@ -115,11 +156,14 @@ public sealed class WarmAudioCapture : IAudioCapture
         }
         finally
         {
+            CancellationTokenSource? pump = null;
             lock (_lock)
             {
                 _session = null;
-                if (IsWarm) ScheduleRelease();
+                if (_reopenWanted) pump = ReleaseLocked();
+                else if (IsWarm) ScheduleRelease();
             }
+            pump?.Cancel();
         }
     }
 
@@ -127,11 +171,15 @@ public sealed class WarmAudioCapture : IAudioCapture
     {
         var pump = new CancellationTokenSource();
         _pump = pump;
-        _pumpTask = PumpAsync(pump.Token);
+        _pumpTask = PumpAsync(pump, pump.Token);
     }
 
-    private async Task PumpAsync(CancellationToken cancellationToken)
+    private async Task PumpAsync(CancellationTokenSource identity, CancellationToken cancellationToken)
     {
+        // True while this pump is the one the rest of the class is talking to. A pump that
+        // has been replaced must not complete a session or touch a ring it no longer owns.
+        bool Current() => ReferenceEquals(_pump, identity);
+
         try
         {
             await foreach (var chunk in _inner.CaptureAsync(cancellationToken).ConfigureAwait(false))
@@ -141,6 +189,7 @@ public sealed class WarmAudioCapture : IAudioCapture
                 var owned = chunk.Samples.ToArray();
                 lock (_lock)
                 {
+                    if (!Current()) continue;
                     if (_session is { } session)
                     {
                         session.Writer.TryWrite(new AudioChunk(owned));
@@ -158,12 +207,19 @@ public sealed class WarmAudioCapture : IAudioCapture
             }
 
             // The inner stream ended on its own (a fake ran out, or a device stopped
-            // cleanly). A recording waiting on it is over.
-            lock (_lock) _session?.Writer.TryComplete();
+            // cleanly). A recording waiting on it is over, and so is this pump.
+            lock (_lock)
+            {
+                if (Current())
+                {
+                    _session?.Writer.TryComplete();
+                    _pump = null;
+                }
+            }
         }
         catch (OperationCanceledException)
         {
-            lock (_lock) _session?.Writer.TryComplete();
+            lock (_lock) if (Current()) _session?.Writer.TryComplete();
         }
         catch (Exception e)
         {
@@ -172,16 +228,23 @@ public sealed class WarmAudioCapture : IAudioCapture
             // key press reopen the device.
             lock (_lock)
             {
-                if (_session is { } session) session.Writer.TryComplete(e);
-                else Log.Warn($"warm microphone stopped: {e.Message}");
+                if (Current())
+                {
+                    if (_session is { } session) session.Writer.TryComplete(e);
+                    else Log.Warn($"warm microphone stopped: {e.Message}");
+                    _pump = null;
+                }
             }
         }
         finally
         {
             lock (_lock)
             {
-                _ring.Clear();
-                _ringSamples = 0;
+                if (_pump is null || Current())
+                {
+                    _ring.Clear();
+                    _ringSamples = 0;
+                }
             }
         }
     }
@@ -191,6 +254,19 @@ public sealed class WarmAudioCapture : IAudioCapture
         var idle = new CancellationTokenSource();
         _idle = idle;
         _ = ReleaseAfterIdleAsync(idle.Token);
+    }
+
+    /// <summary>Marks the current pump as finished with. Call under the lock; cancel the result outside it.</summary>
+    private CancellationTokenSource? ReleaseLocked()
+    {
+        _idle?.Cancel();
+        _idle = null;
+        _reopenWanted = false;
+        _ring.Clear();
+        _ringSamples = 0;
+        var pump = _pump;
+        _pump = null;
+        return pump;
     }
 
     private async Task ReleaseAfterIdleAsync(CancellationToken cancellationToken)
@@ -208,23 +284,23 @@ public sealed class WarmAudioCapture : IAudioCapture
         lock (_lock)
         {
             if (_session is not null || cancellationToken.IsCancellationRequested) return;
-            pump = _pump;
-            _pump = null;
+            pump = ReleaseLocked();
         }
         pump?.Cancel();
-        Log.Info("microphone released after idle");
+        if (pump is not null) Log.Info("microphone released after idle");
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         Task? pumpTask;
+        CancellationTokenSource? pump;
         lock (_lock)
         {
-            _idle?.Cancel();
-            _pump?.Cancel();
+            pump = ReleaseLocked();
             pumpTask = _pumpTask;
         }
+        pump?.Cancel();
         if (pumpTask is not null)
         {
             try { await pumpTask.ConfigureAwait(false); }

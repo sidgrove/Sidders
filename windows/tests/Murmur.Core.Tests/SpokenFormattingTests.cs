@@ -13,6 +13,10 @@ public sealed class SpokenFormattingTests
     [InlineData("Hmm. Let me see.", "Let me see.")]
     [InlineData("Summer is here.", "Summer is here.")]
     [InlineData("The drummer was late.", "The drummer was late.")]
+    [InlineData("It's 5 mm wide.", "It's 5 mm wide.")]
+    [InlineData("It's 5mm wide.", "It's 5mm wide.")]
+    [InlineData("She went to the ER last night.", "She went to the ER last night.")]
+    [InlineData("Mm, I think so.", "I think so.")]
     public void Fillers_go_but_real_words_stay(string input, string expected) =>
         SpokenFormatting.Apply(input).ShouldBe(expected);
 

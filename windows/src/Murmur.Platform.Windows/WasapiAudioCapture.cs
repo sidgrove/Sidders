@@ -31,6 +31,7 @@ public sealed class WasapiAudioCapture : IAudioCapture
 
     private readonly Func<string?> _deviceId;
     private WasapiCapture? _capture;
+    private MMDevice? _device;
 
     private Channel<float[]>? _channel;
     private BufferedWaveProvider? _rawSink;
@@ -86,6 +87,9 @@ public sealed class WasapiAudioCapture : IAudioCapture
     {
         using var enumerator = new MMDeviceEnumerator();
         var device = OpenDevice(enumerator, _deviceId());
+        // Kept for the life of the stream and released in StopCapture: WasapiCapture only
+        // disposes the AudioClient it made from the device, never the device itself.
+        _device = device;
 
         // Bounded and drop-oldest so a slow consumer can never block the capture thread.
         // Losing the oldest audio is bad; stalling the audio engine is worse.
@@ -132,6 +136,8 @@ public sealed class WasapiAudioCapture : IAudioCapture
             }
         }
 
+        _device = null;
+        device.Dispose();
         throw new InvalidOperationException("Could not open the microphone in any supported format.");
     }
 
@@ -173,8 +179,10 @@ public sealed class WasapiAudioCapture : IAudioCapture
         // Right rate and channel count, integer samples. Cheap to convert.
         yield return new WaveFormat(AudioChunk.SampleRate, 16, 1);
 
-        // Whatever the engine is already running at; we convert in managed code.
-        yield return device.AudioClient.MixFormat;
+        // Whatever the engine is already running at; we convert in managed code. The
+        // AudioClient property builds a new COM object on every get, so hold and dispose it.
+        using var client = device.AudioClient;
+        yield return client.MixFormat;
     }
 
     private void BuildManagedConverter(WaveFormat source)
@@ -183,6 +191,11 @@ public sealed class WasapiAudioCapture : IAudioCapture
         {
             BufferDuration = TimeSpan.FromSeconds(3),
             DiscardOnBufferOverflow = true,
+            // ReadFully defaults to TRUE, which pads a short read with silence to the full
+            // request. Left on, the drain loop below never sees the empty sink and spins
+            // forever on NAudio's capture thread — WASAPI is never read again, the channel
+            // fills with zeros, and Dispose blocks joining that thread.
+            ReadFully = false,
         };
 
         ISampleProvider provider = _rawSink.ToSampleProvider();
@@ -225,12 +238,13 @@ public sealed class WasapiAudioCapture : IAudioCapture
 
         _rawSink!.AddSamples(e.Buffer, 0, e.BytesRecorded);   // AddSamples copies internally
 
-        // Drain until the resampler starves. A zero read means "no more buffered input right
-        // now" — it is not end-of-stream and not an error.
-        while (true)
+        // Drain while the sink still holds input. Bounded by what was just added: every
+        // read consumes sink bytes, so this cannot spin. The resampler may hand back a
+        // sample or two of residue on an empty sink; a short read is not an error.
+        while (_rawSink.BufferedBytes > 0)
         {
             var read = _pipeline!.Read(_pullBuffer, 0, _pullBuffer.Length);
-            if (read == 0) return;
+            if (read <= 0) return;
 
             var owned = new float[read];
             Array.Copy(_pullBuffer, owned, read);
@@ -253,8 +267,18 @@ public sealed class WasapiAudioCapture : IAudioCapture
         }
 
         // ~1.5s of exactly-zero samples. A live microphone always has a noise floor, so this
-        // means the OS is feeding us silence rather than the room being quiet.
-        _consecutiveSilentChunks = allZero ? _consecutiveSilentChunks + 1 : 0;
+        // means the OS is feeding us silence rather than the room being quiet. The flag
+        // describes the stream *now*: the first real sample clears it, so a headset muted
+        // for a call and unmuted since does not keep reporting itself as blocked for the
+        // rest of a warm stream.
+        if (!allZero)
+        {
+            _consecutiveSilentChunks = 0;
+            LooksLikeBlockedMicrophone = false;
+            return;
+        }
+
+        _consecutiveSilentChunks++;
         if (_consecutiveSilentChunks > 1500 / BufferMilliseconds) LooksLikeBlockedMicrophone = true;
     }
 
@@ -275,6 +299,8 @@ public sealed class WasapiAudioCapture : IAudioCapture
         try { _capture.StopRecording(); } catch (COMException) { /* already gone */ }
         _capture.Dispose();
         _capture = null;
+        _device?.Dispose();
+        _device = null;
 
         _channel?.Writer.TryComplete();
         IsCapturing = false;

@@ -62,8 +62,62 @@ respond to the same dictation shortcut and insert overlapping text.
 
 On 2026-09-09, the user verified automatic insertion, send-word removal, the send animation,
 standalone `send it`, and dictation with the main window closed on Windows. The Windows
-solution currently has 208 passing tests. The latest capture-start change still needs
+solution currently has 234 passing tests. The latest capture-start change still needs
 a spoken hardware check; microphone privacy and unplugging a microphone remain separate checks.
+
+---
+
+## What the 2026-09-12 review changed
+
+A full review of the engine, the Win32 layer and the UI, with every confirmed finding fixed
+and pinned by a test in `tests/Murmur.Core.Tests/ResilienceTests.cs`:
+
+- **Blocked-microphone flag was sticky.** Set once by 1.5 s of digital silence and never
+  cleared, so a headset muted for a call faulted every later dictation. The flag now
+  describes the stream *now*, and only a silent recording can raise the fault.
+- **Preview decoded the whole buffer every 700 ms.** Past a minute that is gigabytes per
+  tick, and past 400 s it throws. The preview now freezes text older than
+  `DictationEngine.PreviewWindow` and re-decodes only the tail.
+- **A microphone chosen in Settings was ignored** while the warm stream held the old one.
+  `WarmAudioCapture.ReopenDevice` closes it at once when idle, or as the recording ends.
+- **The warm stream's idle release raced a new recording** and could complete the new
+  session with the dying pump. Pumps now carry an identity and never touch a successor.
+- **The managed audio fallback spun forever.** `BufferedWaveProvider.ReadFully` defaults to
+  true, so the drain loop never saw an empty sink. Latent on this machine (the native
+  16 kHz float path is accepted) and fatal on any device that refuses it.
+- **Lifting a held modifier used neutral key codes**, which Windows delivers as the *left*
+  key: Right Ctrl stayed held through Enter and a phantom Left Ctrl stuck afterwards.
+  Modifiers are now probed and re-sent side-specifically.
+- **A surrogate pair at a chunk boundary was re-sent** as a lone low surrogate.
+- **A Gemini reply cut off by the 2048-token cap was typed** as if complete. The cap is
+  gone and any `finishReason` other than `STOP` falls back to the local text.
+- **Settings, dictionary and history were written non-atomically**, on every keystroke.
+  `AtomicFile` writes beside and renames; a corrupt settings file is set aside as
+  `.corrupt` rather than silently replaced by defaults.
+- **The two legacy settings switches re-migrated on every launch**, undoing a later choice.
+  Migration now runs once. The duplicate full-stop switch in Behaviour is gone.
+- **Stores were mutable lists shared across threads.** `TranscriptStore` and
+  `DictionaryFile` are copy-on-write; readers get a snapshot.
+- **Escape in the key recorder became the hotkey**, and a recorder left open swallowed the
+  first key typed into another app. Escape now cancels at the hook, and leaving the window
+  cancels too. The recorder also resubscribes when Settings is shown a second time.
+- **Navigating away from Settings cancelled a model download.** It now cancels only when
+  the window closes. Model status refreshes once the engine has loaded it.
+- **The Gemini key saved only on focus loss**, so paste-then-Ctrl+Q lost it. Text fields
+  save on a short debounce and are flushed at quit.
+- **A missed key-up** (delivered to an elevated window) left Hold mode recording. The
+  engine polls the physical key while recording in Hold mode.
+- **Quitting mid-transcription disposed the model under a running decode.** Disposal now
+  waits up to `DictationEngine.DisposeGrace`.
+- **A stale ducking-recovery record disabled ducking forever**, silently. Records for a
+  vanished output are dropped, records age out after a day, and the platform layer can
+  finally log through `PlatformDiagnostics`.
+- **A press during transcription was ignored.** Each recording is now its own session
+  (buffer, token, preview), so the next one can start while the previous is still in the
+  model or waiting on Gemini. Transcriptions are queued and typed in spoken order.
+- Smaller: "mm" after a figure and "ER" are no longer removed as fillers; the overlay is
+  click-through; the pill says "Nothing heard" instead of vanishing; "Clear all" takes two
+  clicks; a paused app says so; the tray can retype the last transcript.
 
 ---
 ## <a id="hardware"></a>What real hardware found

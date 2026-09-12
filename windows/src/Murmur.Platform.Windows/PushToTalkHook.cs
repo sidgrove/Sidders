@@ -206,13 +206,24 @@ public sealed class PushToTalkHook : IHotkeySource
     private const int VK_ESCAPE = 0x1B;
 
     /// <inheritdoc />
+    public bool IsTriggerHeld => (GetAsyncKeyState(_chord.TriggerKey) & 0x8000) != 0;
+
+    /// <summary>How long <see cref="Start"/> waits for the hook thread to report in.</summary>
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(3);
+
+    private volatile bool _abandoned;
+
+    /// <inheritdoc />
     public bool Start()
     {
         StopListening();
         s_instance = this;
+        _abandoned = false;
 
-        using var ready = new ManualResetEventSlim(false);
-        var installed = false;
+        // A task, not a wait handle: the old ManualResetEventSlim was disposed when Start
+        // timed out, and a hook thread that reported in late then threw on a disposed
+        // handle from a thread with nothing to catch it.
+        var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         _thread = new Thread(() =>
         {
@@ -222,10 +233,19 @@ public sealed class PushToTalkHook : IHotkeySource
             // Pass the running module's handle. IntPtr.Zero is documented as possibly
             // failing when threadId is 0, which is exactly the global case.
             _hook = SetWindowsHookEx(WH_KEYBOARD_LL, s_callback, GetModuleHandle(null), 0);
-            installed = _hook != IntPtr.Zero;
+            var installed = _hook != IntPtr.Zero;
 
-            // ReSharper disable once AccessToDisposedClosure
-            ready.Set();
+            // If Start gave up waiting, the engine already believes there is no hook. A hook
+            // that quietly comes alive afterwards would work while the app says it does
+            // not; take it straight back down instead.
+            if (installed && _abandoned)
+            {
+                UnhookWindowsHookEx(_hook);
+                _hook = IntPtr.Zero;
+                installed = false;
+            }
+
+            ready.TrySetResult(installed);
             if (!installed) return;
 
             // Required. The system delivers hook callbacks by *sending a message* to this
@@ -251,9 +271,11 @@ public sealed class PushToTalkHook : IHotkeySource
 
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();
-        ready.Wait(TimeSpan.FromSeconds(3));
 
-        return installed;
+        if (ready.Task.Wait(StartTimeout)) return ready.Task.Result;
+
+        _abandoned = true;
+        return false;
     }
 
     /// <inheritdoc />
@@ -302,6 +324,9 @@ public sealed class PushToTalkHook : IHotkeySource
     /// <inheritdoc />
     public event EventHandler<(int VirtualKey, int Modifiers)>? Captured;
 
+    /// <inheritdoc />
+    public event EventHandler? CaptureCancelled;
+
     private volatile bool _capturing;
 
     /// <inheritdoc />
@@ -339,6 +364,21 @@ public sealed class PushToTalkHook : IHotkeySource
     /// <summary>Handles one event while recording a shortcut. Returns true to swallow it.</summary>
     private bool Capture(int key, bool isDown)
     {
+        // Escape is the way out, never the answer. The window cannot see it — this hook
+        // swallows every key while recording — so the cancel has to happen here. Without
+        // it, Escape became the push-to-talk key, and every Escape anywhere started a
+        // dictation.
+        if (key == VK_ESCAPE)
+        {
+            if (isDown)
+            {
+                _capturing = false;
+                _seenModifiers = 0;
+                _notifications.Post(() => CaptureCancelled?.Invoke(this, EventArgs.Empty));
+            }
+            return true;
+        }
+
         if (!IsModifierKey(key))
         {
             if (!isDown) return true;

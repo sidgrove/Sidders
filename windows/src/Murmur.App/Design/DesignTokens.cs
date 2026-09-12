@@ -755,6 +755,15 @@ public static class Tokens
         /// <summary>How long "Copied" stays on a button.</summary>
         public static TimeSpan Confirmation { get; } = TimeSpan.FromMilliseconds(1400);
 
+        /// <summary>How long the pill says "Nothing heard" before it goes.</summary>
+        public static TimeSpan DroppedNotice { get; } = TimeSpan.FromMilliseconds(1200);
+
+        /// <summary>How long after typing stops a settings field is saved.</summary>
+        public static TimeSpan SaveDebounce { get; } = TimeSpan.FromMilliseconds(400);
+
+        /// <summary>How long a destructive button stays armed waiting for its second click.</summary>
+        public static TimeSpan ConfirmWindow { get; } = TimeSpan.FromSeconds(4);
+
         /// <summary>Hover lift of a card, in pixels. <c>translateY(-1px)</c>.</summary>
         public const double CardLift = 1;
 

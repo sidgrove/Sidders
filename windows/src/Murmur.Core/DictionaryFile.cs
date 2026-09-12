@@ -35,7 +35,14 @@ public sealed class DictionaryFile
     private static readonly char[] LineSeparators = ['\n', '\r'];
 
     private readonly string _path;
-    private List<DictionaryEntry> _entries = [];
+
+    /// <summary>
+    /// Copy-on-write: replaced whole on every change, never mutated in place. The engine
+    /// reads <see cref="Entries"/> on a pool thread mid-transcription while the UI edits
+    /// on its own; a shared mutable list there is a "collection was modified" crash
+    /// waiting for the one dictation that overlaps a click.
+    /// </summary>
+    private DictionaryEntry[] _entries = [];
 
     /// <summary>Opens (and creates if needed) the dictionary at <paramref name="path"/>.</summary>
     public DictionaryFile(string path)
@@ -65,7 +72,14 @@ public sealed class DictionaryFile
     /// <summary>Re-reads the file, discarding in-memory state.</summary>
     public void Reload()
     {
-        _entries = File.Exists(_path) ? Parse(File.ReadAllText(_path)) : [];
+        try
+        {
+            _entries = File.Exists(_path) ? [.. Parse(File.ReadAllText(_path))] : [];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"dictionary could not be read: {e.Message}");
+        }
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -117,24 +131,26 @@ public sealed class DictionaryFile
     /// <summary>Adds an entry and saves.</summary>
     public void Add(DictionaryEntry entry)
     {
-        _entries.Add(entry);
+        _entries = [.. _entries, entry];
         Save();
     }
 
     /// <summary>Replaces an entry by id and saves.</summary>
     public void Update(DictionaryEntry entry)
     {
-        var index = _entries.FindIndex(e => e.Id == entry.Id);
+        var index = Array.FindIndex(_entries, e => e.Id == entry.Id);
         if (index < 0) return;
 
-        _entries[index] = entry;
+        var next = (DictionaryEntry[])_entries.Clone();
+        next[index] = entry;
+        _entries = next;
         Save();
     }
 
     /// <summary>Removes an entry and saves.</summary>
     public void Remove(Guid id)
     {
-        _entries.RemoveAll(e => e.Id == id);
+        _entries = _entries.Where(e => e.Id != id).ToArray();
         Save();
     }
 
@@ -151,13 +167,18 @@ public sealed class DictionaryFile
 
     private void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-
         var body = string.Join(
             Environment.NewLine,
             _entries.Select(e => e.ToFileLine()));
 
-        File.WriteAllText(_path, Header + body + Environment.NewLine, System.Text.Encoding.UTF8);
+        try
+        {
+            AtomicFile.WriteAllText(_path, Header + body + Environment.NewLine);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"dictionary could not be saved: {e.Message}");
+        }
 
         Changed?.Invoke(this, EventArgs.Empty);
     }

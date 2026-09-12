@@ -18,9 +18,59 @@ public sealed class SettingsView : UserControl
     private readonly Composition _composition;
     private readonly AppSettings _settings;
     private readonly ModelPart _model;
+    private readonly List<DebouncedSave> _pending = [];
 
     /// <summary>Raised after a model download completes, so the panel can reload it.</summary>
     public event EventHandler? ModelChanged;
+
+    /// <summary>Re-reads the model status, after the engine has loaded or failed to load it.</summary>
+    public void RefreshModel() => _model.Refresh();
+
+    /// <summary>Writes any edit still waiting on its debounce. Call before the app quits.</summary>
+    public void Flush()
+    {
+        foreach (var save in _pending) save.Flush();
+    }
+
+    /// <summary>
+    /// Saves a text field a moment after typing stops rather than on every keystroke, and
+    /// on demand at quit. The API key used to save only on focus loss, so pasting it and
+    /// pressing Ctrl+Q lost it.
+    /// </summary>
+    private sealed class DebouncedSave
+    {
+        private readonly DispatcherTimer _timer = new() { Interval = Tokens.Motion.SaveDebounce };
+        private Action? _pendingSave;
+
+        public DebouncedSave()
+        {
+            _timer.Tick += (_, _) => Flush();
+        }
+
+        public void Schedule(Action save)
+        {
+            _pendingSave = save;
+            _timer.Stop();
+            _timer.Start();
+        }
+
+        public void Flush()
+        {
+            _timer.Stop();
+            var save = _pendingSave;
+            _pendingSave = null;
+            save?.Invoke();
+        }
+    }
+
+    private TextBox Debounced(TextBox box, Action<string?> save)
+    {
+        var debounce = new DebouncedSave();
+        _pending.Add(debounce);
+        box.TextChanged += (_, _) => debounce.Schedule(() => save(box.Text));
+        box.LostFocus += (_, _) => debounce.Flush();
+        return box;
+    }
 
     /// <summary>Builds the settings window.</summary>
     public SettingsView(Composition composition)
@@ -48,24 +98,21 @@ public sealed class SettingsView : UserControl
 
     private StackPanel BuildWritingSection()
     {
-        var sendWord = new TextBox { Text = _settings.Data.SendWord, Watermark = "blob" };
-        sendWord.TextChanged += (_, _) =>
+        var sendWord = Debounced(new TextBox { Text = _settings.Data.SendWord, Watermark = "blob" }, text =>
         {
-            var value = sendWord.Text?.Trim() ?? string.Empty;
+            var value = text?.Trim() ?? string.Empty;
             if (_settings.Data.SendWord != value) Save(_settings.Data with { SendWord = value });
-        };
-        var sendAliases = new TextBox { Text = _settings.Data.SendWordAliases, Watermark = "e.g. sand" };
-        sendAliases.TextChanged += (_, _) =>
+        });
+        var sendAliases = Debounced(new TextBox { Text = _settings.Data.SendWordAliases, Watermark = "e.g. sand" }, text =>
         {
-            var value = sendAliases.Text ?? string.Empty;
+            var value = text ?? string.Empty;
             if (_settings.Data.SendWordAliases != value) Save(_settings.Data with { SendWordAliases = value });
-        };
-        var sendOnly = new TextBox { Text = _settings.Data.SendOnlyPhrase, Watermark = "send it" };
-        sendOnly.TextChanged += (_, _) =>
+        });
+        var sendOnly = Debounced(new TextBox { Text = _settings.Data.SendOnlyPhrase, Watermark = "send it" }, text =>
         {
-            var value = sendOnly.Text?.Trim() ?? string.Empty;
+            var value = text?.Trim() ?? string.Empty;
             if (_settings.Data.SendOnlyPhrase != value) Save(_settings.Data with { SendOnlyPhrase = value });
-        };
+        });
         var fullStops = new Segmented(["Drop after one sentence", "Never end with one", "Keep"], (int)FullStopIndex(_settings.Data.FullStops));
         fullStops.Selected += (_, i) =>
         {
@@ -120,26 +167,23 @@ public sealed class SettingsView : UserControl
 
     private StackPanel BuildAiSection()
     {
-        var key = Field.Text("Gemini API key, or leave blank to use GEMINI_API_KEY", _settings.Data.GeminiApiKey, secret: true);
-        key.LostFocus += (_, _) =>
+        var key = Debounced(Field.Text("Gemini API key, or leave blank to use GEMINI_API_KEY", _settings.Data.GeminiApiKey, secret: true), text =>
         {
-            var value = string.IsNullOrWhiteSpace(key.Text) ? null : key.Text.Trim();
+            var value = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
             if (_settings.Data.GeminiApiKey != value) Save(_settings.Data with { GeminiApiKey = value });
-        };
+        });
 
-        var model = Field.Text(GeminiCleaner.DefaultModel, _settings.Data.GeminiModel ?? GeminiCleaner.DefaultModel);
-        model.LostFocus += (_, _) =>
+        var model = Debounced(Field.Text(GeminiCleaner.DefaultModel, _settings.Data.GeminiModel ?? GeminiCleaner.DefaultModel), text =>
         {
-            var value = string.IsNullOrWhiteSpace(model.Text) || model.Text.Trim() == GeminiCleaner.DefaultModel ? null : model.Text.Trim();
+            var value = string.IsNullOrWhiteSpace(text) || text.Trim() == GeminiCleaner.DefaultModel ? null : text.Trim();
             if (_settings.Data.GeminiModel != value) Save(_settings.Data with { GeminiModel = value });
-        };
+        });
 
-        var custom = Field.Multiline("Your own rules, e.g. “Never use exclamation marks”, “Write dates as 9 Sept”, “Sign off emails with Dave”", _settings.Data.CustomInstructions);
-        custom.LostFocus += (_, _) =>
+        var custom = Debounced(Field.Multiline("Your own rules, e.g. “Never use exclamation marks”, “Write dates as 9 Sept”, “Sign off emails with Dave”", _settings.Data.CustomInstructions), text =>
         {
-            var value = string.IsNullOrWhiteSpace(custom.Text) ? null : custom.Text.Trim();
+            var value = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
             if (_settings.Data.CustomInstructions != value) Save(_settings.Data with { CustomInstructions = value });
-        };
+        });
 
         var result = Text.Muted(string.Empty);
         var test = new SgButton("Test with a sample", SgButton.Kind.Ghost);
@@ -176,8 +220,9 @@ public sealed class SettingsView : UserControl
         var column = Panels.Column(Tokens.Space.Roomy,
             Panels.SwitchRow("Type into the focused app", "Off copies to the clipboard and keeps history without typing or pressing Enter.", _settings.Data.InjectText, v => Save(_settings.Data with { InjectText = v })),
             Panels.SwitchRow("Keep a history", null, _settings.Data.KeepHistory, v => Save(_settings.Data with { KeepHistory = v })),
-            Panels.SwitchRow("Mute other audio while I talk", "Mutes other apps on the current output while recording, then restores their previous mute state. Volume levels stay unchanged.", _settings.Data.DuckOtherAudio, v => Save(_settings.Data with { DuckOtherAudio = v })),
-            Panels.SwitchRow("Drop the full stop after a single sentence", "For chat messages and fragments. Questions and longer dictations keep their punctuation.", _settings.Data.DropSingleSentenceFullStop, v => Save(_settings.Data with { DropSingleSentenceFullStop = v })));
+            // The trailing full stop is chosen once, in Writing. A second switch here wrote
+            // a legacy flag the engine no longer read, and the two silently disagreed.
+            Panels.SwitchRow("Mute other audio while I talk", "Mutes other apps on the current output while recording, then restores their previous mute state. Volume levels stay unchanged.", _settings.Data.DuckOtherAudio, v => Save(_settings.Data with { DuckOtherAudio = v })));
 
         if (_composition.Startup is { } startup)
         {

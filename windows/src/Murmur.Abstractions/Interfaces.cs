@@ -136,8 +136,25 @@ public interface IHotkeySource : IDisposable
     /// </remarks>
     void BeginCapture();
 
+    /// <summary>
+    /// Raised when a capture begun with <see cref="BeginCapture"/> ends without a chord:
+    /// the user pressed Escape. Fired from the hook's thread. Optional for implementations
+    /// that cannot observe Escape.
+    /// </summary>
+    event EventHandler? CaptureCancelled { add { } remove { } }
+
     /// <summary>Abandons a capture in progress.</summary>
     void CancelCapture();
+
+    /// <summary>
+    /// Whether the trigger key is physically down right now, where the platform can tell.
+    /// </summary>
+    /// <remarks>
+    /// A low-level hook never sees a key-up delivered to an elevated window or the secure
+    /// desktop. Without this the engine would keep recording until the next press. Returns
+    /// true where the platform cannot observe key state, so nothing is ever cut short.
+    /// </remarks>
+    bool IsTriggerHeld => true;
 
     /// <summary>Begins listening.</summary>
     /// <returns>False if the hook could not be installed.</returns>
@@ -276,6 +293,9 @@ public interface ITranscriptCleaner
 
     /// <summary>Cleans <paramref name="text"/>, or returns null if it could not.</summary>
     Task<string?> CleanAsync(string text, CancellationToken cancellationToken);
+
+    /// <summary>Why the most recent <see cref="CleanAsync"/> returned null, for the log. Null when it succeeded.</summary>
+    string? LastError => null;
 
     /// <summary>
     /// Opens whatever connection <see cref="CleanAsync"/> will need, so the round trip after

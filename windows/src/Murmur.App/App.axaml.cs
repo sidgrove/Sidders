@@ -124,6 +124,8 @@ public partial class App : Application
 
     private void OnTrayCopyLast(object? sender, EventArgs e) => _main?.CopyLast();
 
+    private void OnTrayRetypeLast(object? sender, EventArgs e) => _main?.RetypeLast();
+
     private void ShowMain()
     {
         if (_main is null) return;

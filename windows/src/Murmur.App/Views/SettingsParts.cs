@@ -130,16 +130,48 @@ public sealed class KeyPart : UserControl
                 Finish(saved: true);
                 SelectKey(chord.VirtualKey, chord.Modifiers);
             });
-            engine.Captured += onCaptured;
-            DetachedFromVisualTree += (_, _) => { engine.Captured -= onCaptured; engine.CancelCapture(); };
+            // Escape reaches the hook, not this window: while recording, the hook swallows
+            // every key. It reports the cancel and the box goes back to idle.
+            EventHandler onCancelled = (_, _) => Dispatcher.UIThread.Post(() => { if (_capturing) Finish(saved: false); });
+
+            // Paired attach/detach, not a one-off subscription: the settings view is cached
+            // and swapped in and out of the window, and after the first swap-out a
+            // detach-only unsubscribe left the recorder listening to nothing.
+            AttachedToVisualTree += (_, _) =>
+            {
+                engine.Captured += onCaptured;
+                engine.CaptureCancelled += onCancelled;
+            };
+            DetachedFromVisualTree += (_, _) =>
+            {
+                engine.Captured -= onCaptured;
+                engine.CaptureCancelled -= onCancelled;
+                if (_capturing) Finish(saved: false);
+            };
         }
 
         box.KeyDown += (_, e) =>
         {
             if (_capturing && e.Key == Avalonia.Input.Key.Escape) { e.Handled = true; Finish(saved: false); }
         };
-        // Not cancelled on focus loss: pressing Alt or Win moves focus in Windows, and that
-        // is exactly the moment a chord is being recorded. Escape, or closing the sheet, cancels.
+
+        // Not cancelled on focus loss within the window: pressing Alt or Win moves focus,
+        // and that is exactly the moment a chord is being recorded. Leaving the whole
+        // window is different — a capture left running would swallow the first key typed
+        // into another app and make it the hotkey.
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this) is Window window) window.Deactivated += OnWindowDeactivated;
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this) is Window window) window.Deactivated -= OnWindowDeactivated;
+        };
+        void OnWindowDeactivated(object? sender, EventArgs e)
+        {
+            if (_capturing) Finish(saved: false);
+        }
+
         return box;
     }
 
@@ -166,7 +198,7 @@ public sealed class KeyPart : UserControl
 
 /// <summary>The speech-model section: status, download with progress, open folder.</summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
-    Justification = "The token source lives for one download and is disposed in that download's finally; detaching from the tree cancels any download in flight.")]
+    Justification = "The token source lives for one download and is disposed in that download's finally; the owning window closing cancels any download in flight.")]
 public sealed class ModelPart : UserControl
 {
     private readonly Composition _composition;
@@ -208,9 +240,24 @@ public sealed class ModelPart : UserControl
             _gauge,
             _gaugeText);
 
-        DetachedFromVisualTree += (_, _) => _downloading?.Cancel();
+        // Cancelled when the window goes, not when this control leaves the tree: the
+        // settings view is swapped out whenever the user looks at another section, and a
+        // 660 MB download that dies because someone clicked "Transcriptions" is a bug.
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this) is Window window) window.Closed += OnWindowClosed;
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this) is Window window) window.Closed -= OnWindowClosed;
+        };
         Refresh();
     }
+
+    private void OnWindowClosed(object? sender, EventArgs e) => _downloading?.Cancel();
+
+    /// <summary>Whether a download is running, so the caller can say so somewhere visible.</summary>
+    public bool IsDownloading => _downloading is not null;
 
     /// <summary>Re-reads the model state.</summary>
     public void Refresh()

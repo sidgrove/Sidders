@@ -53,7 +53,14 @@ public sealed record TranscriptRecord
 public sealed class TranscriptStore
 {
     private readonly string _path;
-    private readonly List<TranscriptRecord> _records = [];
+    private readonly Lock _lock = new();
+
+    /// <summary>
+    /// Copy-on-write, newest first. <see cref="Add"/> runs on the engine's thread as a
+    /// dictation completes while the list view enumerates <see cref="Records"/> on the UI
+    /// thread; replacing the array whole means a reader always sees a consistent list.
+    /// </summary>
+    private TranscriptRecord[] _records = [];
 
     /// <summary>Opens (and creates if needed) the history at <paramref name="path"/>.</summary>
     public TranscriptStore(string path)
@@ -74,82 +81,111 @@ public sealed class TranscriptStore
     /// <summary>Re-reads the file.</summary>
     public void Reload()
     {
-        _records.Clear();
+        var loaded = new List<TranscriptRecord>();
 
-        if (File.Exists(_path))
+        try
         {
-            foreach (var line in File.ReadLines(_path))
+            if (File.Exists(_path))
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
+                foreach (var line in File.ReadLines(_path))
+                {
+                    if (string.IsNullOrWhiteSpace(line)) continue;
 
-                // A single corrupt line must not destroy the whole history — skip it and
-                // keep everything else.
-                try
-                {
-                    var record = JsonSerializer.Deserialize(line, TranscriptJsonContext.Default.TranscriptRecord);
-                    if (record is not null) _records.Add(record);
-                }
-                catch (JsonException)
-                {
-                    // Skip.
+                    // A single corrupt line must not destroy the whole history — skip it and
+                    // keep everything else.
+                    try
+                    {
+                        var record = JsonSerializer.Deserialize(line, TranscriptJsonContext.Default.TranscriptRecord);
+                        if (record is not null) loaded.Add(record);
+                    }
+                    catch (JsonException)
+                    {
+                        // Skip.
+                    }
                 }
             }
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"history could not be read: {e.Message}");
+        }
 
-        _records.Reverse();   // newest first, which is how the list reads
+        loaded.Reverse();   // newest first, which is how the list reads
+        lock (_lock) _records = [.. loaded];
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Appends a record.</summary>
     public void Add(TranscriptRecord record)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-
         var line = JsonSerializer.Serialize(record, TranscriptJsonContext.Default.TranscriptRecord);
-        File.AppendAllText(_path, line + Environment.NewLine);
-
-        _records.Insert(0, record);
+        lock (_lock)
+        {
+            _records = [record, .. _records];
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+                File.AppendAllText(_path, line + Environment.NewLine);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Log.Warn($"history could not be saved: {e.Message}");
+            }
+        }
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Deletes one record.</summary>
     public void Remove(Guid id)
     {
-        _records.RemoveAll(r => r.Id == id);
-        Rewrite();
+        lock (_lock)
+        {
+            _records = _records.Where(r => r.Id != id).ToArray();
+            Rewrite();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Deletes everything.</summary>
     public void Clear()
     {
-        _records.Clear();
-        Rewrite();
+        lock (_lock)
+        {
+            _records = [];
+            Rewrite();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Case-insensitive search over transcript text.</summary>
     public IReadOnlyList<TranscriptRecord> Search(string query)
     {
+        var records = _records;
         var trimmed = query.Trim();
-        if (trimmed.Length == 0) return _records;
+        if (trimmed.Length == 0) return records;
 
-        return _records
+        return records
             .Where(r => r.Text.Contains(trimmed, StringComparison.OrdinalIgnoreCase)
                      || (r.RawText?.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ?? false))
             .ToList();
     }
 
+    /// <summary>Writes the whole list. Call under <see cref="_lock"/>.</summary>
     private void Rewrite()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-
         // Oldest first on disk, so a plain append stays correct next time.
         var lines = _records
-            .AsEnumerable()
             .Reverse()
             .Select(r => JsonSerializer.Serialize(r, TranscriptJsonContext.Default.TranscriptRecord));
 
-        File.WriteAllLines(_path, lines);
-        Changed?.Invoke(this, EventArgs.Empty);
+        try
+        {
+            AtomicFile.WriteAllLines(_path, lines);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"history could not be saved: {e.Message}");
+        }
     }
 }
 

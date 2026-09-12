@@ -195,7 +195,9 @@ lookahead, `\p{L}`, and `$1`–`$9` in replacements. Nothing else.
    distribution, so Windows users will meet SmartScreen.
 4. **Engine biasing on Windows.** sherpa-onnx's offline recogniser exposes no contextual
    phrase list for this model, so the dictionary's correction pass does the whole job there.
-5. **A hotkey change without a restart** on Windows — the hook is built once at startup.
+5. **Live device-change notifications** on Windows. A microphone chosen in Settings takes
+   effect at once, but a headset Windows promotes to the default mid-session is only picked
+   up when the warm stream next reopens. An `IMMNotificationClient` forwarder would fix it.
 
 ## What no amount of CI can verify
 

@@ -17,6 +17,13 @@ public sealed class NativeWindow : IWindowTweaks
     private const long WS_EX_NOACTIVATE = 0x08000000;
     private const long WS_EX_TOOLWINDOW = 0x00000080;
 
+    /// <summary>
+    /// Mouse input falls through to whatever is underneath. The framework's own
+    /// hit-test flag only stops the framework from reacting; the HWND still swallowed
+    /// the click, so the pill's patch of screen was dead during a long dictation.
+    /// </summary>
+    private const long WS_EX_TRANSPARENT = 0x00000020;
+
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT { public int Left, Top, Right, Bottom; }
 
@@ -55,7 +62,7 @@ public sealed class NativeWindow : IWindowTweaks
         if (handle == 0) return;
 
         var style = GetWindowLongPtr(handle, GWL_EXSTYLE).ToInt64();
-        style |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        style |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT;
         SetWindowLongPtr(handle, GWL_EXSTYLE, new IntPtr(style));
     }
 

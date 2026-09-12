@@ -138,7 +138,10 @@ public static partial class SpokenFormatting
         return builder.ToString();
     }
 
-    [GeneratedRegex(@"(?<=^|[\s,.])(?:um+|uh+|er|erm|hmm+|mm+)\b[,.]?\s*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    // "mm" after a figure is millimetres ("5 mm wide"); "ER" in capitals is the emergency
+    // room, which the speech model writes as an acronym. Neither is a hesitation. The
+    // lookbehind keeps a filler from being taken out of the middle of "summer".
+    [GeneratedRegex(@"(?<=^|[\s,.])(?<!\d\s?)(?:[Uu][Mm]+|[Uu][Hh]+|[Ee][Rr][Mm]|[Ee]r|e[Rr]|[Hh][Mm]{2,}|[Mm][Mm]+)\b[,.]?\s*", RegexOptions.CultureInvariant)]
     private static partial Regex Filler();
 
     [GeneratedRegex(@"[,.]?\s*\b(?:scratch that|delete that|strike that)\b[,.]?\s*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

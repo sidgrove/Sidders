@@ -123,9 +123,12 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
         var request = new GenerateRequest(
             SystemInstruction: new Content([new Part(Prompt(_customInstructions()))]),
             Contents: [new Content([new Part(text)])],
+            // No output cap: a fixed 2048 tokens cut a ten-minute dictation off at the
+            // knees and, because 80% of the text still looked plausible, the truncated
+            // version was typed. The model's own limit is far above any dictation.
             GenerationConfig: new GenerationConfig(
                 Temperature: 0,
-                MaxOutputTokens: 2048,
+                MaxOutputTokens: null,
                 ThinkingConfig: new ThinkingConfig(0)));
 
         var body = JsonSerializer.Serialize(request, GeminiJsonContext.Default.GenerateRequest);
@@ -151,11 +154,20 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
 
             var parsed = JsonSerializer.Deserialize(payload, GeminiJsonContext.Default.GenerateResponse);
             var candidates = parsed?.Candidates;
-            var parts = candidates is { Count: > 0 } ? candidates[0].Content?.Parts : null;
+            var candidate = candidates is { Count: > 0 } ? candidates[0] : null;
+            var parts = candidate?.Content?.Parts;
             var reply = parts is { Count: > 0 } ? parts[0].Text : null;
             if (string.IsNullOrWhiteSpace(reply))
             {
                 LastError = "empty reply";
+                return null;
+            }
+
+            // Anything but a clean stop — a length cap, a safety filter, a recitation
+            // block — means the text is not the whole text. Never type a partial rewrite.
+            if (candidate?.FinishReason is { } reason && !string.Equals(reason, "STOP", StringComparison.OrdinalIgnoreCase))
+            {
+                LastError = $"reply was cut short ({reason})";
                 return null;
             }
 
@@ -232,14 +244,16 @@ public sealed class GeminiCleaner : ITranscriptCleaner, IDisposable
 
     internal sealed record GenerationConfig(
         [property: JsonPropertyName("temperature")] double Temperature,
-        [property: JsonPropertyName("maxOutputTokens")] int MaxOutputTokens,
+        [property: JsonPropertyName("maxOutputTokens")] int? MaxOutputTokens,
         [property: JsonPropertyName("thinkingConfig")] ThinkingConfig ThinkingConfig);
 
     internal sealed record ThinkingConfig([property: JsonPropertyName("thinkingBudget")] int ThinkingBudget);
 
     internal sealed record GenerateResponse([property: JsonPropertyName("candidates")] IReadOnlyList<Candidate>? Candidates);
 
-    internal sealed record Candidate([property: JsonPropertyName("content")] Content? Content);
+    internal sealed record Candidate(
+        [property: JsonPropertyName("content")] Content? Content,
+        [property: JsonPropertyName("finishReason")] string? FinishReason = null);
 }
 
 /// <summary>Source-generated JSON for the Gemini wire shapes.</summary>

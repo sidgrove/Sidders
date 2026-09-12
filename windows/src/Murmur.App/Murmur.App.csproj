@@ -36,56 +36,73 @@
        COPIED next to the app without being compiled against — which is what lets this
        project stay on plain net10.0 and therefore build and headless-test on macOS.
        Skipped entirely off Windows, where it cannot compile. -->
+  <PropertyGroup Condition="'$([System.OperatingSystem]::IsWindows())' == 'true'">
+    <!-- The one folder the platform layer is ever built into. Every glob below reads from
+         here, and the ProjectReference is pinned so that it always writes here. -->
+    <PlatformLayerDir>..\Murmur.Platform.Windows\bin\$(Configuration)\net10.0-windows\</PlatformLayerDir>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$([System.OperatingSystem]::IsWindows())' == 'true'">
     <!-- SkipGetTargetFrameworkProperties is required: without it MSBuild refuses the
          reference outright ("targets net10.0-windows, cannot be referenced by a project
-         that targets .NETCoreApp") before ReferenceOutputAssembly is ever considered. -->
+         that targets .NETCoreApp") before ReferenceOutputAssembly is ever considered.
+
+         UndefineProperties must also strip RuntimeIdentifier and the publish properties.
+         `dotnet publish -r win-x64` passes them as GLOBAL properties, and without this they
+         flowed into the referenced build and moved its output to
+         bin\Release\net10.0-windows\win-x64\ — a folder nothing else looked in. The
+         Build-time copy then warned MSB3030 and shipped nothing; only a second, separate
+         publish-time rebuild saved the artifact. Pinning the reference removes the need
+         for that second build entirely. -->
     <ProjectReference Include="..\Murmur.Platform.Windows\Murmur.Platform.Windows.csproj"
                       ReferenceOutputAssembly="false"
                       SkipGetTargetFrameworkProperties="true"
-                      UndefineProperties="TargetFramework"
+                      UndefineProperties="TargetFramework;RuntimeIdentifier;SelfContained;PublishSingleFile;IncludeNativeLibrariesForSelfExtract;PublishDir;DebugType;_IsPublishing"
                       Private="false" />
   </ItemGroup>
 
   <!-- ReferenceOutputAssembly=false suppresses the copy too, so bring the assembly across
-       explicitly. PlatformFactory resolves it by name at startup. -->
+       explicitly. The platform layer has already been built by the ProjectReference above
+       by the time either target runs, so both just read $(PlatformLayerDir). A missing file
+       is an ERROR, not a warning: when this layer fails to ship, the app starts perfectly
+       and then does nothing at all when the key is pressed (README, "What real hardware
+       found"). PlatformFactory resolves the assembly by name at startup. -->
+  <Target Name="CollectWindowsPlatformLayer"
+          Condition="'$([System.OperatingSystem]::IsWindows())' == 'true'">
+    <ItemGroup>
+      <PlatformLayer Include="$(PlatformLayerDir)Murmur.Platform.Windows.dll" />
+      <PlatformLayer Include="$(PlatformLayerDir)NAudio*.dll" />
+    </ItemGroup>
+    <Error Condition="!Exists('$(PlatformLayerDir)Murmur.Platform.Windows.dll')"
+           Text="Murmur.Platform.Windows.dll was not found in $(PlatformLayerDir). The platform layer did not build where Murmur.App expects it." />
+    <Error Condition="!Exists('$(PlatformLayerDir)NAudio.Wasapi.dll')"
+           Text="NAudio.Wasapi.dll was not found in $(PlatformLayerDir). Check CopyLocalLockFileAssemblies in Murmur.Platform.Windows.csproj." />
+  </Target>
+
+  <Target Name="CopyWindowsPlatformLayer"
+          AfterTargets="Build"
+          DependsOnTargets="CollectWindowsPlatformLayer"
+          Condition="'$([System.OperatingSystem]::IsWindows())' == 'true'">
+    <Copy SourceFiles="@(PlatformLayer)"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
   <Target Name="PublishWindowsPlatformLayer"
           BeforeTargets="ComputeResolvedFilesToPublishList"
+          DependsOnTargets="CollectWindowsPlatformLayer"
           Condition="'$([System.OperatingSystem]::IsWindows())' == 'true'">
-    <!-- RemoveProperties matters: `dotnet publish -r win-x64` sets RuntimeIdentifier and
-         friends as GLOBAL properties, which flow into this inner build and move its output
-         to bin\Release\net10.0-windows\win-x64\ — where the globs below never look. Found
-         the first time publish was run on a real machine rather than in CI's exact shape. -->
-    <MSBuild Projects="..\Murmur.Platform.Windows\Murmur.Platform.Windows.csproj"
-             Targets="Build"
-             Properties="Configuration=$(Configuration)"
-             RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;IncludeNativeLibrariesForSelfExtract;PublishDir;DebugType;_IsPublishing" />
     <ItemGroup>
-      <_PlatformPublish Include="..\Murmur.Platform.Windows\bin\$(Configuration)\net10.0-windows\Murmur.Platform.Windows.dll" />
-      <_PlatformPublish Include="..\Murmur.Platform.Windows\bin\$(Configuration)\net10.0-windows\NAudio*.dll" />
       <!-- Loose beside the exe rather than inside the bundle: PublishSingleFile only bundles
            assemblies the compiler knows about, and this one is deliberately invisible to it.
            The default load context probes AppContext.BaseDirectory, and Program.cs installs
            a resolver as a belt-and-braces fallback. -->
-      <ResolvedFileToPublish Include="@(_PlatformPublish)">
+      <ResolvedFileToPublish Include="@(PlatformLayer)">
         <RelativePath>%(Filename)%(Extension)</RelativePath>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
       </ResolvedFileToPublish>
     </ItemGroup>
-  </Target>
-
-  <Target Name="CopyWindowsPlatformLayer"
-          AfterTargets="Build"
-          Condition="'$([System.OperatingSystem]::IsWindows())' == 'true'">
-    <ItemGroup>
-      <PlatformLayer Include="..\Murmur.Platform.Windows\bin\$(Configuration)\net10.0-windows\Murmur.Platform.Windows.dll" />
-      <PlatformLayer Include="..\Murmur.Platform.Windows\bin\$(Configuration)\net10.0-windows\NAudio*.dll" />
-    </ItemGroup>
-    <Copy SourceFiles="@(PlatformLayer)"
-          DestinationFolder="$(OutDir)"
-          SkipUnchangedFiles="true"
-          ContinueOnError="true" />
   </Target>
 
 </Project>

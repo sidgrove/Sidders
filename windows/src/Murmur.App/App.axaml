@@ -18,6 +18,7 @@
           <NativeMenu>
             <NativeMenuItem Header="Show Acapella" Click="OnTrayShow" />
             <NativeMenuItem Header="Copy last transcript" Click="OnTrayCopyLast" />
+            <NativeMenuItem Header="Type last transcript again" Click="OnTrayRetypeLast" />
             <NativeMenuItem Header="Settings…" Click="OnTraySettings" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="Quit Acapella" Click="OnTrayQuit" />
