@@ -1,0 +1,20 @@
+# Line endings are normalised in the repository. The Mac build must never receive CRLF:
+# `make` rejects a Makefile with CRLF recipes, `sh` chokes on a CRLF script, and codesign
+# treats a CRLF Info.plist as a different file. Windows tooling is indifferent either way.
+* text=auto
+
+Makefile          text eol=lf
+*.sh              text eol=lf
+*.swift           text eol=lf
+*.plist           text eol=lf
+*.entitlements    text eol=lf
+*.yml             text eol=lf
+*.json            text eol=lf
+
+*.ps1             text eol=crlf
+*.cmd             text eol=crlf
+
+*.icns            binary
+*.ico             binary
+*.png             binary
+*.onnx            binary

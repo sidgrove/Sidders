@@ -604,11 +604,15 @@ public sealed class DictationEngine : IAsyncDisposable
         try
         {
             if (!IsCurrent(session)) return;
+
+            // Everything a watcher can observe is put right BEFORE the state flips to
+            // Idle: audio restored, level zeroed, preview cleared. Clearing the session
+            // first left a window in which the engine read Idle with the music still muted.
+            RestoreAudio();
+            Level = 0;
+            SetPreview(string.Empty);
             lock (_bufferLock) _current = null;
             await session.Stop.CancelAsync().ConfigureAwait(false);
-            Level = 0;
-            RestoreAudio();
-            SetPreview(string.Empty);
             Changed?.Invoke(this, EventArgs.Empty);
             Log.Info("recording cancelled");
         }
@@ -736,12 +740,12 @@ public sealed class DictationEngine : IAsyncDisposable
             // from Recording to Transcribing and never reads Idle in between — a watcher
             // that saw Idle here would believe the dictation was over before it began.
             Interlocked.Increment(ref _transcribing);
+            RestoreAudio();
+            Level = 0;
             lock (_bufferLock) _current = null;
             await session.Stop.CancelAsync().ConfigureAwait(false);
             // Read now, before the next recording can start and overwrite it.
             session.PreRoll = _capture.PreRollDelivered;
-            Level = 0;
-            RestoreAudio();
             Changed?.Invoke(this, EventArgs.Empty);
 
             // Queued behind any transcription still running, so two dictations spoken back
