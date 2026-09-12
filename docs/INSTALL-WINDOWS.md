@@ -24,6 +24,7 @@ Speech recognition runs locally. Optional **AI clean-up** sends the transcript t
 ## Daily use
 
 - The floating indicator shows recording and processing. Sound effects can be disabled in Settings.
+- The window has its own title bar, but the standard keyboard window menu still works: **Alt+Space**, then **N** to minimise, **X** to maximise, **R** to restore or **C** to close.
 - Closing the window with **×** keeps dictation running in the tray. **Quit Acapella** stops it.
 - Say **send it** at the end to insert your text and press Enter, or say it alone to submit text already in the focused app. Enter's effect depends on the app. Disable the send phrase in Settings → Writing if unwanted.
 - Add unusual names and accounting terms to Dictionary.
