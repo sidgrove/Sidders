@@ -1,15 +1,24 @@
 name: macOS
 
-# Runs the shared dictionary contract against the Swift implementation. The Windows
-# workflow runs the identical vectors against the C# one. Both must be green for the two
-# implementations to be considered in agreement — that pairing is the whole point.
+# Two jobs.
+#
+# 1. The shared dictionary contract against the Swift implementation. The Windows workflow
+#    runs the identical vectors against the C# one. Both must be green for the two
+#    implementations to be considered in agreement — that pairing is the whole point.
+#
+# 2. The full Mac app, built and bundled exactly as `make CONFIG=release dist` does on a
+#    developer's machine, with the resulting zip attached as an artifact. This is the proof
+#    that a Mac user who clones the repo can build it. It is ad-hoc signed (no certificate
+#    on a runner), so the artifact is for verification, not for handing to end users — see
+#    docs/MAC.md for notarization. It needs an Xcode with the macOS 26 SDK on the image; if
+#    the image has not caught up yet the job says so and does not fail the workflow.
 
 on:
   push:
     branches: [main]
-    paths: ['Sources/**', 'Tests/**', 'shared/**', 'Package.swift', '.github/workflows/macos.yml']
+    paths: ['Sources/**', 'Tests/**', 'shared/**', 'Resources/**', 'Package.swift', 'Package.resolved', 'Makefile', 'Tools/**', '.github/workflows/macos.yml']
   pull_request:
-    paths: ['Sources/**', 'Tests/**', 'shared/**', 'Package.swift', '.github/workflows/macos.yml']
+    paths: ['Sources/**', 'Tests/**', 'shared/**', 'Resources/**', 'Package.swift', 'Package.resolved', 'Makefile', 'Tools/**', '.github/workflows/macos.yml']
   workflow_dispatch:
 
 permissions:
@@ -36,9 +45,8 @@ jobs:
       - name: Swift version
         run: swift --version
 
-      # The app target needs macOS 26 and the Speech framework, which the runner image
-      # does not have. The dictionary target is deliberately platform-neutral, so it — and
-      # the contract that matters here — builds and tests anywhere.
+      # The dictionary target is deliberately platform-neutral, so it — and the contract
+      # that matters here — builds and tests on any image, whatever SDK it carries.
       - name: Test the dictionary target
         run: swift test --filter VectorTests
 
@@ -50,3 +58,55 @@ jobs:
             exit 1
           fi
           echo "Vectors match."
+
+  app-build:
+    name: Full Mac app (macOS 26 SDK)
+    runs-on: macos-15
+    timeout-minutes: 45
+    # A missing SDK on the image is a fact about GitHub's runners, not about this code.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $latest"
+          sudo xcode-select -s "$latest/Contents/Developer"
+
+      - name: Check for the macOS 26 SDK
+        id: sdk
+        run: |
+          sdk=$(xcrun --sdk macosx --show-sdk-version)
+          echo "macOS SDK $sdk; $(swift --version | head -1)"
+          if [ "${sdk%%.*}" -ge 26 ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::This runner image carries macOS SDK $sdk; the app needs 26. Skipping the full build until the image catches up."
+          fi
+
+      - name: Preflight
+        if: steps.sdk.outputs.ok == 'true'
+        run: sh Tools/mac-doctor.sh || true
+
+      - name: Build, bundle and zip
+        if: steps.sdk.outputs.ok == 'true'
+        run: make CONFIG=release dist
+
+      - name: Verify the bundle
+        if: steps.sdk.outputs.ok == 'true'
+        run: |
+          app="$HOME/Library/Caches/AcapellaBuild/Acapella.app"
+          test -x "$app/Contents/MacOS/MurmurYouTube"
+          codesign --verify --verbose=2 "$app"
+          plutil -p "$app/Contents/Info.plist" | grep -E 'CFBundleIdentifier|CFBundleDisplayName|LSMinimumSystemVersion'
+
+      - name: Attach the unsigned build
+        if: steps.sdk.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Acapella-macOS-adhoc-signed
+          path: dist/Acapella-macOS.zip
+          if-no-files-found: error

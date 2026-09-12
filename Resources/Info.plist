@@ -3,23 +3,25 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Murmur YouTube</string>
+	<string>Acapella</string>
 	<key>CFBundleDisplayName</key>
-	<string>Murmur YouTube</string>
-	<!-- Deliberately space-free and distinct from the existing app's `murmur`, so that
-	     `pkill`/`killall` on either app can never match the other. -->
+	<string>Acapella</string>
+	<!-- The executable keeps the Swift module's name: renaming the module touches every
+	     file and cannot be verified without a Mac. It is an internal name; nothing the user
+	     sees carries it. Space-free so `pkill -x` can never match another app. -->
 	<key>CFBundleExecutable</key>
 	<string>MurmurYouTube</string>
-	<!-- Separate from the existing Murmur's com.murmur.client: distinct TCC identity,
-	     distinct preferences domain, no shared state of any kind. -->
+	<!-- The bundle identifier is the app's identity for TCC grants and preferences. It was
+	     ai.pivotstudio.murmur-youtube before the 2026-09-12 rebrand; an existing install
+	     will be asked for Microphone and Accessibility again, once. -->
 	<key>CFBundleIdentifier</key>
-	<string>ai.pivotstudio.murmur-youtube</string>
+	<string>com.sidgrove.acapella</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<!-- Lets the dashboard's Clear button call back into the app. A file:// page can't
@@ -28,10 +30,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>ai.pivotstudio.murmur-youtube</string>
+			<string>com.sidgrove.acapella</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>murmuryt</string>
+				<string>acapella</string>
 			</array>
 		</dict>
 	</array>
@@ -44,8 +46,8 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Murmur YouTube listens while you hold the push-to-talk key so it can turn your speech into text.</string>
+	<string>Acapella listens while you hold the push-to-talk key so it can turn your speech into text.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Murmur YouTube transcribes your speech on-device to insert text where you're typing.</string>
+	<string>Acapella transcribes your speech on-device to insert text where you're typing.</string>
 </dict>
 </plist>

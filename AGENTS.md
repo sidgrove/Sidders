@@ -18,7 +18,10 @@ whatever had focus. Two independent implementations:
 | Speech | Apple `SpeechAnalyzer`, or Parakeet via FluidAudio | Parakeet via sherpa-onnx |
 | Location | repo root | `windows/` |
 
-**The macOS app works and is in daily use.**
+**The macOS app works and is in daily use.** Since 2026-09-12 it presents as Acapella
+(bundle `com.sidgrove.acapella`, `Acapella.app`); the Swift module and executable are still
+called `MurmurYouTube` because renaming them cannot be verified without a Mac. Its data
+still lives under `~/Library/Application Support/MurmurYouTube` for the same reason.
 
 **The Windows app runs on real hardware** (Windows 11, since 2026-09-08): hook armed,
 model loaded, front panel, tray, Settings, in-app model download, microphone selection,
@@ -117,7 +120,7 @@ shows as **on** while the app is untrusted. The `Makefile` auto-detects a Develo
 If a grant does get wedged, reset that one row — never toggle, and never omit the bundle ID:
 
 ```bash
-tccutil reset Accessibility ai.pivotstudio.murmur-youtube
+tccutil reset Accessibility com.sidgrove.acapella
 ```
 
 A bare `tccutil reset Accessibility` wipes every app on the machine. Then quit System
@@ -191,8 +194,10 @@ lookahead, `\p{L}`, and `$1`–`$9` in replacements. Nothing else.
 
 1. **Command Mode** — select text, hold a second key, "make this more formal."
 2. **Onboarding** — a first-run window walking through the macOS permissions.
-3. **Notarization** (macOS) and **code signing** (Windows). Both apps are unsigned for
-   distribution, so Windows users will meet SmartScreen.
+3. **Notarization** (macOS) and **code signing** (Windows). `make notarize` does the Mac
+   side once a Developer ID certificate and a notarytool profile exist on the building
+   machine (docs/MAC.md); nobody has run it yet. Windows is unsigned, so users meet
+   SmartScreen.
 4. **Engine biasing on Windows.** sherpa-onnx's offline recogniser exposes no contextual
    phrase list for this model, so the dictionary's correction pass does the whole job there.
 5. **Live device-change notifications** on Windows. A microphone chosen in Settings takes

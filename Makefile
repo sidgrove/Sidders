@@ -1,3 +1,6 @@
+## The Swift module and executable keep their original name; everything the user sees
+## says Acapella. Renaming the module touches every source file and cannot be verified
+## without a Mac, so it is deliberately left alone.
 EXEC     := MurmurYouTube
 CONFIG   := debug
 
@@ -7,7 +10,7 @@ CONFIG   := debug
 ## .build while the compiler is using them — producing "input file was modified during
 ## the build" on random object files, and occasionally a wedged swift-frontend stuck at
 ## 0% CPU. Moving the scratch path to ~/Library/Caches (never synced) removes the race.
-SCRATCH  := $(HOME)/Library/Caches/MurmurYouTubeBuild/scratch
+SCRATCH  := $(HOME)/Library/Caches/AcapellaBuild/scratch
 BUILD    := $(SCRATCH)/$(CONFIG)/$(EXEC)
 
 ## The bundle is assembled and signed OUTSIDE this directory on purpose.
@@ -17,10 +20,14 @@ BUILD    := $(SCRATCH)/$(CONFIG)/$(EXEC)
 ## and codesign hard-refuses anything carrying them ("resource fork, Finder information,
 ## or similar detritus not allowed"). `xattr -cr` immediately before signing is not enough
 ## — the provider re-stamps in between. Staging in ~/Library/Caches sidesteps it entirely.
-STAGE    := $(HOME)/Library/Caches/MurmurYouTubeBuild
-APPNAME  := Murmur YouTube.app
+STAGE    := $(HOME)/Library/Caches/AcapellaBuild
+APPNAME  := Acapella.app
 BUNDLE   := $(STAGE)/$(APPNAME)
 CONTENTS := $(BUNDLE)/Contents
+
+## Where `make dist` writes the shareable zip. Git-ignored.
+DIST     := dist
+ZIP      := $(DIST)/Acapella-macOS.zip
 
 ## TCC keys the Accessibility grant to the code signature, so an ad-hoc signature — which
 ## changes on every build — makes the user re-grant after every `make`. Signing with a
@@ -32,7 +39,21 @@ ifeq ($(strip $(SIGN_ID)),)
 SIGN_ID := -
 endif
 
-.PHONY: all build app run install clean icon
+## Notarization requires a secure timestamp on the signature; an ad-hoc signature cannot
+## carry one (there is no identity for Apple to vouch for), so it is only requested when
+## a real certificate is in use.
+ifeq ($(SIGN_ID),-)
+TIMESTAMP := --timestamp=none
+else
+TIMESTAMP := --timestamp
+endif
+
+## The notarytool keychain profile. Create it once with
+##   xcrun notarytool store-credentials acapella --apple-id you@example.com \
+##       --team-id TEAMID --password <app-specific password>
+NOTARY_PROFILE ?= acapella
+
+.PHONY: all build app run install clean icon dist notarize doctor
 
 all: app
 
@@ -61,11 +82,11 @@ app: build
 	@codesign --force --sign "$(SIGN_ID)" \
 		--entitlements Resources/$(EXEC).entitlements \
 		--options runtime \
-		--timestamp=none \
+		$(TIMESTAMP) \
 		"$(BUNDLE)"
 	@echo "built $(BUNDLE)  [signed: $(SIGN_ID)]"
 
-## Only ever targets the MurmurYouTube executable — never the separate `murmur` app.
+## Only ever targets this executable — never any other app that happens to be running.
 run: app
 	@pkill -x $(EXEC) 2>/dev/null || true
 	@open "$(BUNDLE)"
@@ -80,5 +101,31 @@ install: app
 	@open "/Applications/$(APPNAME)"
 	@echo "installed to /Applications/$(APPNAME)"
 
+## A zip to hand to someone. `ditto` preserves the signature and bundle structure; Finder's
+## Compress and plain `zip` can both break a signed bundle.
+dist: app
+	@mkdir -p "$(DIST)"
+	@rm -f "$(ZIP)"
+	@ditto -c -k --keepParent "$(BUNDLE)" "$(ZIP)"
+	@echo "wrote $(ZIP)  [signed: $(SIGN_ID)]"
+
+## Developer ID + notarization: the step that stops Gatekeeper from refusing the app on
+## someone else's Mac. Needs the certificate in the keychain (SIGN_ID picks it up) and a
+## notarytool profile (see NOTARY_PROFILE). Re-zips after stapling so the ticket ships.
+notarize: dist
+	@if [ "$(SIGN_ID)" = "-" ]; then \
+		echo "No 'Developer ID Application' certificate in the keychain; cannot notarize an ad-hoc build."; \
+		exit 1; \
+	fi
+	@xcrun notarytool submit "$(ZIP)" --keychain-profile "$(NOTARY_PROFILE)" --wait
+	@xcrun stapler staple "$(BUNDLE)"
+	@rm -f "$(ZIP)"
+	@ditto -c -k --keepParent "$(BUNDLE)" "$(ZIP)"
+	@echo "notarized and stapled: $(ZIP) is ready to share"
+
+## Checks the machine before the first build: OS, Xcode, Swift, certificate, sync folders.
+doctor:
+	@sh Tools/mac-doctor.sh
+
 clean:
-	@rm -rf .build "$(STAGE)" "$(SCRATCH)"
+	@rm -rf .build "$(STAGE)" "$(SCRATCH)" "$(DIST)"

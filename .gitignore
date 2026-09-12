@@ -25,3 +25,6 @@ models/
 
 # Windows distributable, produced by windows/publish.ps1
 windows/dist/
+
+# Mac distributable, produced by `make dist` at the repo root
+/dist/
