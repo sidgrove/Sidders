@@ -80,10 +80,9 @@ app on the machine. A Developer ID certificate makes this go away entirely.
   shadowed in your shell; use `/usr/bin/log`.
 - **Nothing happens on the hotkey and the menu shows "Grant Accessibility…"**: the tap
   could not be created. Grant Accessibility; the app polls and arms itself once granted.
-- **Where the app writes**: `~/Library/Application Support/MurmurYouTube/` holds
+- **Where the app writes**: `~/Library/Application Support/Acapella/` holds
   `dictionary.txt` (the same format as Windows; copy it between machines) and the run log
-  behind the engine-comparison dashboard. The folder keeps its old name on purpose so an
-  existing install does not lose its dictionary.
+  behind the engine-comparison dashboard. An older install's `MurmurYouTube` folder is moved here automatically on first launch.
 - **Logs**: `/usr/bin/log stream --predicate 'subsystem == "com.sidgrove.acapella"'`.
 
 ---
@@ -106,18 +105,18 @@ app on the machine. A Developer ID certificate makes this go away entirely.
 | Onboarding | First-run walkthrough. | None; the permission prompts are the onboarding. |
 
 The direction of the design is the same on both: 1980s field recorders, red only for
-recording, amber and green only for meters, no gradients. `Sources/MurmurYouTube/UI/DesignSystem.swift`
+recording, amber and green only for meters, no gradients. `Sources/Acapella/UI/DesignSystem.swift`
 holds every token; views must not contain literal values.
 
 ---
 
 ## Adapting it: where things live
 
-Everything is in `Sources/MurmurYouTube/`, about 5,000 lines. The module and executable
-keep the project's original name `MurmurYouTube`; only what the user sees says Acapella.
-Renaming the module is a mechanical change (Package.swift, the `Sources/` folder,
-`Makefile` `EXEC`, `Resources/MurmurYouTube.entitlements`, `Info.plist`
-`CFBundleExecutable`) that nobody has yet done on a Mac where it could be compiled.
+Everything is in `Sources/Acapella/`, about 5,000 lines. The module, executable and
+bundle are all `Acapella`; the dictionary library is `MurmurDictionary`, a name shared with
+the test-vector contract and left alone on purpose. On first launch a build from after the
+rename moves `~/Library/Application Support/MurmurYouTube` to `.../Acapella`
+(`Support/AppPaths.swift`), so an existing dictionary comes along.
 
 | To change… | Look in |
 |---|---|
@@ -130,7 +129,7 @@ Renaming the module is a mechanical change (Package.swift, the `Sources/` folder
 | Dictionary corrections | `Sources/MurmurDictionary/` — shared contract; change `shared/dictionary-test-vectors.json` first (see AGENTS.md) |
 | Settings and their defaults | `Support/Settings.swift` |
 | Permissions | `Support/Permissions.swift` |
-| Windows, HUD, menu bar | `UI/MainWindow.swift`, `UI/HUDPanel.swift`, `UI/HUDView.swift`, `UI/SettingsWindow.swift`, `MurmurYouTubeApp.swift` (menu bar contents) |
+| Windows, HUD, menu bar | `UI/MainWindow.swift`, `UI/HUDPanel.swift`, `UI/HUDView.swift`, `UI/SettingsWindow.swift`, `AcapellaApp.swift` (menu bar contents) |
 | Colours, sizes, typography | `UI/DesignSystem.swift` |
 | Bundle name, identifier, usage strings, minimum OS | `Resources/Info.plist` |
 | Build, sign, install, package | `Makefile` |
@@ -190,10 +189,8 @@ flow but are untested. If Apple rejects the submission, `xcrun notarytool log <i
    second Mac.
 2. Add a `release.yml` job for macOS mirroring the Windows one, with the certificate and
    notary credentials as repository secrets.
-3. Rename the Swift module to `Acapella` and move the data folder, with a one-time
-   migration of `dictionary.txt`.
-4. Bring the Mac app up to the Windows feature set where it matters: recorded chords and
+3. Bring the Mac app up to the Windows feature set where it matters: recorded chords and
    tap-to-toggle, a history window, spoken send, start at login, first-run onboarding.
-5. Decide whether the Wispr Flow comparison tooling (`Core/WisprTrigger.swift`,
+4. Decide whether the Wispr Flow comparison tooling (`Core/WisprTrigger.swift`,
    `Transcription/WisprReader.swift`, the comparison window) stays in a product build or
    moves to `bench/`.

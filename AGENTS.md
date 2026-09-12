@@ -18,10 +18,10 @@ whatever had focus. Two independent implementations:
 | Speech | Apple `SpeechAnalyzer`, or Parakeet via FluidAudio | Parakeet via sherpa-onnx |
 | Location | repo root | `windows/` |
 
-**The macOS app works and is in daily use.** Since 2026-09-12 it presents as Acapella
-(bundle `com.sidgrove.acapella`, `Acapella.app`); the Swift module and executable are still
-called `MurmurYouTube` because renaming them cannot be verified without a Mac. Its data
-still lives under `~/Library/Application Support/MurmurYouTube` for the same reason.
+**The macOS app works and is in daily use.** Since 2026-09-12 it is Acapella throughout:
+bundle `com.sidgrove.acapella`, `Acapella.app`, Swift module and executable `Acapella`, data
+under `~/Library/Application Support/Acapella` (migrated from the old `MurmurYouTube` folder
+on first launch by `Support/AppPaths.swift`). The dictionary target is still `MurmurDictionary`.
 
 **The Windows app runs on real hardware** (Windows 11, since 2026-09-08): hook armed,
 model loaded, front panel, tray, Settings, in-app model download, microphone selection,
@@ -93,7 +93,7 @@ invisible to SwiftUI's state graph. Don't "clean that up" into `@State`.
 
 ## Design system
 
-`Sources/MurmurYouTube/UI/DesignSystem.swift` defines every colour, size, radius, duration
+`Sources/Acapella/UI/DesignSystem.swift` defines every colour, size, radius, duration
 and material token. **Views must not contain literal values.** If a component needs a number
 that isn't a token, add the token rather than inlining it.
 

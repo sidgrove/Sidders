@@ -99,7 +99,7 @@ jobs:
         if: steps.sdk.outputs.ok == 'true'
         run: |
           app="$HOME/Library/Caches/AcapellaBuild/Acapella.app"
-          test -x "$app/Contents/MacOS/MurmurYouTube"
+          test -x "$app/Contents/MacOS/Acapella"
           codesign --verify --verbose=2 "$app"
           plutil -p "$app/Contents/Info.plist" | grep -E 'CFBundleIdentifier|CFBundleDisplayName|LSMinimumSystemVersion'
 

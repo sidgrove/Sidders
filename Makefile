@@ -1,7 +1,5 @@
-## The Swift module and executable keep their original name; everything the user sees
-## says Acapella. Renaming the module touches every source file and cannot be verified
-## without a Mac, so it is deliberately left alone.
-EXEC     := MurmurYouTube
+## The Swift module, executable and bundle are all called Acapella since 2026-09-12.
+EXEC     := Acapella
 CONFIG   := debug
 
 ## Build products live OUTSIDE this directory, for the same reason the .app does.

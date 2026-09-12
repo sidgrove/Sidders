@@ -36,10 +36,7 @@ final class DictionaryStore {
     private var isSaving = false
 
     static var fileURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MurmurYouTube", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base.appendingPathComponent("dictionary.txt")
+        AppPaths.supportDirectory.appendingPathComponent("dictionary.txt")
     }
 
     private init() {
