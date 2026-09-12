@@ -19,11 +19,12 @@ the executable needs its companion DLLs. Do not download GitHub's source-code ZI
 
 **[Step-by-step Windows installation and troubleshooting →](docs/INSTALL-WINDOWS.md)**
 
-**Mac:** this repo also contains a native Swift app for macOS 26 that builds from source
-with one command and is in daily use. It has a different feature set from the Windows app
-(Apple's speech engine by default, Parakeet optional, no Gemini tier) and there is no
-notarised download yet, so it is for people comfortable running `make`.
-**[Mac: requirements, build, permissions, feature differences and how to adapt it →](docs/MAC.md)**
+**Mac (Apple silicon, macOS 26):** download **Acapella-macOS.zip** from the same release,
+unzip, drag **Acapella.app** to Applications, then right-click it and choose **Open** the
+first time (the build is not yet notarised). Grant Microphone and Accessibility when asked.
+It is a separate native Swift app with a different feature set from Windows: Apple's speech
+engine by default, Parakeet optional, no Gemini tier.
+**[Mac: install, build from source, permissions, feature differences and how to adapt it →](docs/MAC.md)**
 
 Developers can build Windows from source:
 

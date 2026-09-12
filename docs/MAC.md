@@ -7,9 +7,28 @@ contract but not the code. It works and is in daily use on the maintainer's mach
 Read this whole page before building. It says what you get, what you do not, how to build
 it, what will go wrong with permissions, and where to change things if you want to adapt it.
 
-**There is no notarised download yet.** Building from source takes one command, but macOS
-treats an app without a Developer ID as untrusted, and the Accessibility permission the app
-needs behaves badly with ad-hoc signatures. Both are solvable; see [Signing](#signing).
+---
+
+## Install from a release download
+
+Every release on the [Releases page](https://github.com/sidgrove/acapella/releases) carries
+**Acapella-macOS.zip**, built by CI on a macOS runner. It needs an Apple silicon Mac on
+macOS 26.
+
+1. Download and unzip. Drag **Acapella.app** to your Applications folder.
+2. The build is not notarised (there is no Developer ID certificate on the build server), so
+   macOS will say it cannot verify the developer. **Right-click the app, choose Open, then
+   Open again.** You only do this once. If the dialog offers no Open button, run
+   `xattr -dr com.apple.quarantine /Applications/Acapella.app` in Terminal and try again.
+3. Allow **Microphone** and **Speech Recognition** when prompted.
+4. **Accessibility** does not prompt: the app opens System Settings → Privacy & Security →
+   Accessibility. Switch Acapella on there. This is what lets it type into other apps.
+5. Open TextEdit, hold **Right ⌥** (Option), speak, release.
+
+Apple's built-in speech engine is the default, so there is nothing to download. The menu bar
+waveform is where the key, engine and clean-up options live.
+
+If you would rather build it yourself, or want to change it, read on.
 
 ---
 

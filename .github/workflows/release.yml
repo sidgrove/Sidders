@@ -1,12 +1,26 @@
-name: Windows preview release
+name: Release
+
+# Pushing a `v*` tag builds both apps, self-tests the Windows exe, and publishes one
+# pre-release carrying both downloads and a combined checksum file. A manual run builds
+# and attaches the artifacts to the workflow without publishing anything.
+#
+# The Mac build is ad-hoc signed: there is no Developer ID certificate on a runner. It is a
+# real, complete Acapella.app, but macOS will refuse to open it until the user right-clicks
+# → Open, or runs `xattr -dr com.apple.quarantine`. Notarised builds need `make notarize`
+# on a Mac with the certificate (docs/MAC.md); wiring that into CI needs the certificate
+# and notary credentials as repository secrets.
+
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
-  release:
+  windows:
+    name: Windows x64
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -31,22 +45,78 @@ jobs:
           ./windows/package.ps1 -PublishDirectory windows/artifacts/publish
       - uses: actions/upload-artifact@v4
         with:
-          name: Acapella-Windows-download
-          path: |
-            windows/artifacts/release/Acapella-Windows-x64.zip
-            windows/artifacts/release/SHA256SUMS.txt
+          name: Acapella-Windows-x64
+          path: windows/artifacts/release/Acapella-Windows-x64.zip
           if-no-files-found: error
-      - name: Publish preview release
+
+  macos:
+    name: macOS (Apple silicon, macOS 26)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $latest"
+          sudo xcode-select -s "$latest/Contents/Developer"
+      - name: Require the macOS 26 SDK
+        run: |
+          sdk=$(xcrun --sdk macosx --show-sdk-version)
+          echo "macOS SDK $sdk; $(swift --version | head -1)"
+          if [ "${sdk%%.*}" -lt 26 ]; then
+            echo "::error::This runner image carries macOS SDK $sdk; the app needs 26. A release cannot ship without the Mac build."
+            exit 1
+          fi
+      - name: Dictionary contract
+        run: swift test --filter VectorTests
+      - name: Build, bundle and zip
+        run: make CONFIG=release dist
+      - name: Verify the bundle
+        run: |
+          app="$HOME/Library/Caches/AcapellaBuild/Acapella.app"
+          test -x "$app/Contents/MacOS/Acapella"
+          codesign --verify --verbose=2 "$app"
+          plutil -p "$app/Contents/Info.plist" | grep -E 'CFBundleIdentifier|CFBundleShortVersionString|LSMinimumSystemVersion'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Acapella-macOS
+          path: dist/Acapella-macOS.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish pre-release
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloads
+      - name: Collect assets and checksums
+        run: |
+          mkdir -p release
+          cp downloads/Acapella-Windows-x64/Acapella-Windows-x64.zip release/
+          cp downloads/Acapella-macOS/Acapella-macOS.zip release/
+          cd release
+          sha256sum Acapella-Windows-x64.zip Acapella-macOS.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Attach to the workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: Acapella-release-assets
+          path: release/*
+      - name: Create or update the pre-release
         if: startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release view "$env:RELEASE_TAG" *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create "$env:RELEASE_TAG" --verify-tag --prerelease --title "Acapella $env:RELEASE_TAG — Windows preview" --notes-file docs/RELEASE-NOTES.md
-            if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
-          }
-          gh release upload "$env:RELEASE_TAG" windows/artifacts/release/Acapella-Windows-x64.zip windows/artifacts/release/SHA256SUMS.txt --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --prerelease \
+              --title "Acapella $RELEASE_TAG — Windows and Mac preview" \
+              --notes-file docs/RELEASE-NOTES.md
+          fi
+          gh release upload "$RELEASE_TAG" release/Acapella-Windows-x64.zip release/Acapella-macOS.zip release/SHA256SUMS.txt --clobber
+          gh release view "$RELEASE_TAG" --json url -q .url
